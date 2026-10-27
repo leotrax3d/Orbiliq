@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_title">Orbiliq</string>
+    <string name="empty_title">Noch keine Unterhaltungen</string>
+    <string name="empty_description">Das Android-Grundgerüst ist bereit. Messenger-Konten sind noch nicht verfügbar. Es werden keine Nachrichten empfangen oder gesendet.</string>
+</resources>

@@ -1,0 +1,181 @@
+{
+  "retrieved_on": "2026-10-27",
+  "method": "Public GitHub REST repository and default-branch commit metadata; metadata is not a legal license determination.",
+  "repositories": [
+    {
+      "repo": "AsamK/signal-cli",
+      "branch": "master",
+      "license": "GPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-10-24T10:02:45Z",
+      "sha": "49aaef000f5459b9a95d145f2441091e9623476a",
+      "commit_date": "2026-10-24T09:47:34Z"
+    },
+    {
+      "repo": "signalapp/libsignal",
+      "branch": "main",
+      "license": "AGPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-10-23T20:12:25Z",
+      "sha": "fc90b90fa2b9c37822fa47ba0e0dcdf387a0c071",
+      "commit_date": "2026-10-23T19:07:35Z"
+    },
+    {
+      "repo": "signalapp/Signal-Android",
+      "branch": "main",
+      "license": "AGPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-10-26T17:33:03Z",
+      "sha": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "commit_date": "2026-10-26T17:32:01Z"
+    },
+    {
+      "repo": "tdlib/td",
+      "branch": "master",
+      "license": "BSL-1.0",
+      "archived": false,
+      "pushed_at": "2026-10-27T14:52:36Z",
+      "sha": "4c6377aa7386c39217878a9a56d581922ad37ca4",
+      "commit_date": "2026-10-27T14:52:35Z"
+    },
+    {
+      "repo": "TGX-Android/Telegram-X",
+      "branch": "main",
+      "license": "GPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-10-25T21:10:10Z",
+      "sha": "9aea5c14351165d99b8ef901e946e8bab99c079c",
+      "commit_date": "2026-10-25T19:19:58Z"
+    },
+    {
+      "repo": "DrKLO/Telegram",
+      "branch": "master",
+      "license": "GPL-2.0",
+      "archived": false,
+      "pushed_at": "2026-10-25T13:12:47Z",
+      "sha": "3de37c8cfb039452be7398909461da6288babf15",
+      "commit_date": "2026-10-25T13:12:33Z"
+    },
+    {
+      "repo": "tulir/whatsmeow",
+      "branch": "main",
+      "license": "MPL-2.0",
+      "archived": false,
+      "pushed_at": "2026-10-27T10:44:41Z",
+      "sha": "1eec1136a50b2ef148b05f1819e77a9d989e0457",
+      "commit_date": "2026-10-27T10:44:41Z"
+    },
+    {
+      "repo": "WhiskeySockets/Baileys",
+      "branch": "master",
+      "license": "MIT",
+      "archived": false,
+      "pushed_at": "2026-10-27T01:54:12Z",
+      "sha": "81345beb67ca3fb0eb79a2c20cd4ac24da517929",
+      "commit_date": "2026-10-26T19:51:03Z"
+    },
+    {
+      "repo": "Auties00/Cobalt",
+      "branch": "master",
+      "license": "MIT",
+      "archived": false,
+      "pushed_at": "2026-07-15T22:51:40Z",
+      "sha": "cb9fbf172507626948fbc3611d0a6fb00bb3a0f1",
+      "commit_date": "2026-07-15T22:51:35Z"
+    },
+    {
+      "repo": "pedroslopez/whatsapp-web.js",
+      "branch": "main",
+      "license": "Apache-2.0",
+      "archived": false,
+      "pushed_at": "2026-10-25T12:04:09Z",
+      "sha": "064a3d5a5a3dce1281a6a12740b5a7051339d154",
+      "commit_date": "2026-09-28T13:10:54Z"
+    },
+    {
+      "repo": "threema-ch/threema-android",
+      "branch": "main",
+      "license": "AGPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-09-23T09:12:17Z",
+      "sha": "d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d",
+      "commit_date": "2026-09-23T09:11:30Z"
+    },
+    {
+      "repo": "threema-ch/threema-desktop",
+      "branch": "stable",
+      "license": "AGPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-09-15T11:27:57Z",
+      "sha": "93a6615c5567f0cf8371619dc1a5e888eed1d0b6",
+      "commit_date": "2026-09-14T14:35:17Z"
+    },
+    {
+      "repo": "threema-ch/threema-web",
+      "branch": "master",
+      "license": "AGPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-10-26T10:50:39Z",
+      "sha": "f755cff075cba8660bb51b7cf639679a482c5ed5",
+      "commit_date": "2026-10-25T19:35:35Z"
+    },
+    {
+      "repo": "threema-ch/libthreema",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "repo": "mautrix/signal",
+      "branch": "main",
+      "license": "AGPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-10-27T12:28:46Z",
+      "sha": "6dc9ac3e0c9a31a5ba59287091282d624e83c706",
+      "commit_date": "2026-10-27T12:28:43Z"
+    },
+    {
+      "repo": "mautrix/whatsapp",
+      "branch": "main",
+      "license": "AGPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-10-27T16:01:51Z",
+      "sha": "021504afb01a5f117dd3ffa368f5a3afe8b19f51",
+      "commit_date": "2026-10-27T12:28:53Z"
+    },
+    {
+      "repo": "Turasa/libsignal-service-java",
+      "branch": "master",
+      "license": "GPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-10-24T09:50:56Z",
+      "sha": "010f0a24776ad33c988f8f28dcceb97446f4420b",
+      "commit_date": "2026-10-24T08:45:43Z"
+    },
+    {
+      "repo": "mollyim/mollyim-android",
+      "branch": "main",
+      "license": "AGPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-10-26T18:23:16Z",
+      "sha": "892d6264ba007b5458a8b74cf9183c665f1f17a1",
+      "commit_date": "2026-09-08T08:46:02Z"
+    },
+    {
+      "repo": "tulir/libsignal-protocol-go",
+      "branch": "main",
+      "license": "GPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-05-29T10:09:32Z",
+      "sha": "c231dd95d97ec136df1224fa5e4980a8bc39bb56",
+      "commit_date": "2026-05-29T10:08:18Z"
+    },
+    {
+      "repo": "WhiskeySockets/libsignal-node",
+      "branch": "master",
+      "license": "GPL-3.0",
+      "archived": false,
+      "pushed_at": "2026-05-13T08:08:10Z",
+      "sha": "bcea72df9ec34d9d9140ab30619cf479c7c144c7",
+      "commit_date": "2026-05-13T08:08:09Z"
+    }
+  ]
+}

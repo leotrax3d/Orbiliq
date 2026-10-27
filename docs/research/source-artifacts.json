@@ -1,0 +1,496 @@
+{
+  "retrieved_on": "2026-10-27",
+  "scope": "Selected primary source files read during research; not a complete source archive, dependency graph, SBOM, or signature verification. Hashes identify fetched bytes only.",
+  "repository_files": [
+    {
+      "repo": "AsamK/signal-cli",
+      "revision": "49aaef000f5459b9a95d145f2441091e9623476a",
+      "path": "LICENSE",
+      "url": "https://github.com/AsamK/signal-cli/blob/49aaef000f5459b9a95d145f2441091e9623476a/LICENSE",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "repo": "AsamK/signal-cli",
+      "revision": "49aaef000f5459b9a95d145f2441091e9623476a",
+      "path": "README.md",
+      "url": "https://github.com/AsamK/signal-cli/blob/49aaef000f5459b9a95d145f2441091e9623476a/README.md",
+      "sha256": "f0cb4f8450913532c862c5b9377a32ad2cef51a6b67beb1f15397c0187313e1f"
+    },
+    {
+      "repo": "AsamK/signal-cli",
+      "revision": "49aaef000f5459b9a95d145f2441091e9623476a",
+      "path": "build.gradle.kts",
+      "url": "https://github.com/AsamK/signal-cli/blob/49aaef000f5459b9a95d145f2441091e9623476a/build.gradle.kts",
+      "sha256": "f67549ef269e7563bb7763d267543ec8402061861be3bbe3e202927eabd0909a"
+    },
+    {
+      "repo": "AsamK/signal-cli",
+      "revision": "49aaef000f5459b9a95d145f2441091e9623476a",
+      "path": "man/signal-cli.1.adoc",
+      "url": "https://github.com/AsamK/signal-cli/blob/49aaef000f5459b9a95d145f2441091e9623476a/man/signal-cli.1.adoc",
+      "sha256": "c23455df8dcc6717ec713bf18817dffe3a5c80d3e86fa7919648049aaf66926d"
+    },
+    {
+      "repo": "Auties00/Cobalt",
+      "revision": "cb9fbf172507626948fbc3611d0a6fb00bb3a0f1",
+      "path": "LICENSE",
+      "url": "https://github.com/Auties00/Cobalt/blob/cb9fbf172507626948fbc3611d0a6fb00bb3a0f1/LICENSE",
+      "sha256": "70d477985148df5dbe1d1c1e124042a8f50e6d0a67ab20cbb5c9494f91172978"
+    },
+    {
+      "repo": "Auties00/Cobalt",
+      "revision": "cb9fbf172507626948fbc3611d0a6fb00bb3a0f1",
+      "path": "README.md",
+      "url": "https://github.com/Auties00/Cobalt/blob/cb9fbf172507626948fbc3611d0a6fb00bb3a0f1/README.md",
+      "sha256": "91324298a0cff1ae7c6b550788deb920a60d8dcb76d1e27d63b802088a7920f8"
+    },
+    {
+      "repo": "Auties00/Cobalt",
+      "revision": "cb9fbf172507626948fbc3611d0a6fb00bb3a0f1",
+      "path": "pom.xml",
+      "url": "https://github.com/Auties00/Cobalt/blob/cb9fbf172507626948fbc3611d0a6fb00bb3a0f1/pom.xml",
+      "sha256": "0c839fc925edf6e36aa185db5ff77c4612c47a7a707dbb59872569a86fc31d51"
+    },
+    {
+      "repo": "DrKLO/Telegram",
+      "revision": "3de37c8cfb039452be7398909461da6288babf15",
+      "path": "LICENSE",
+      "url": "https://github.com/DrKLO/Telegram/blob/3de37c8cfb039452be7398909461da6288babf15/LICENSE",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    {
+      "repo": "DrKLO/Telegram",
+      "revision": "3de37c8cfb039452be7398909461da6288babf15",
+      "path": "README.md",
+      "url": "https://github.com/DrKLO/Telegram/blob/3de37c8cfb039452be7398909461da6288babf15/README.md",
+      "sha256": "f14f594cba6f95b5969146d1baf78a7890a915eb0b794a8392db9a507650abda"
+    },
+    {
+      "repo": "DrKLO/Telegram",
+      "revision": "3de37c8cfb039452be7398909461da6288babf15",
+      "path": "build.gradle",
+      "url": "https://github.com/DrKLO/Telegram/blob/3de37c8cfb039452be7398909461da6288babf15/build.gradle",
+      "sha256": "a7fc78c873827eb54e95acb73bfa74744ec636490e66a8df0cb32ea8b7009f67"
+    },
+    {
+      "repo": "TGX-Android/Telegram-X",
+      "revision": "9aea5c14351165d99b8ef901e946e8bab99c079c",
+      "path": "LICENSE",
+      "url": "https://github.com/TGX-Android/Telegram-X/blob/9aea5c14351165d99b8ef901e946e8bab99c079c/LICENSE",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "repo": "TGX-Android/Telegram-X",
+      "revision": "9aea5c14351165d99b8ef901e946e8bab99c079c",
+      "path": "README.md",
+      "url": "https://github.com/TGX-Android/Telegram-X/blob/9aea5c14351165d99b8ef901e946e8bab99c079c/README.md",
+      "sha256": "f62dd4a16cfd03dd7b7333907ef57d27cbcee92c8dab73fc83d8d1576cc38188"
+    },
+    {
+      "repo": "TGX-Android/Telegram-X",
+      "revision": "9aea5c14351165d99b8ef901e946e8bab99c079c",
+      "path": "build.gradle.kts",
+      "url": "https://github.com/TGX-Android/Telegram-X/blob/9aea5c14351165d99b8ef901e946e8bab99c079c/build.gradle.kts",
+      "sha256": "02101ae6675918300ece69e4114150eed92eafb8a58fee281cacd244d9c4efc5"
+    },
+    {
+      "repo": "Turasa/libsignal-service-java",
+      "revision": "010f0a24776ad33c988f8f28dcceb97446f4420b",
+      "path": "LICENSE",
+      "url": "https://github.com/Turasa/libsignal-service-java/blob/010f0a24776ad33c988f8f28dcceb97446f4420b/LICENSE",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "repo": "Turasa/libsignal-service-java",
+      "revision": "010f0a24776ad33c988f8f28dcceb97446f4420b",
+      "path": "README.md",
+      "url": "https://github.com/Turasa/libsignal-service-java/blob/010f0a24776ad33c988f8f28dcceb97446f4420b/README.md",
+      "sha256": "03d4c6a8b4a5c5227b3ca6b8ca1df73112d27d461f0520b8a915ea44b4544244"
+    },
+    {
+      "repo": "WhiskeySockets/Baileys",
+      "revision": "81345beb67ca3fb0eb79a2c20cd4ac24da517929",
+      "path": "LICENSE",
+      "url": "https://github.com/WhiskeySockets/Baileys/blob/81345beb67ca3fb0eb79a2c20cd4ac24da517929/LICENSE",
+      "sha256": "7de58f2d05311a1966af48b13494f05a9b58165a169fb057bfeceb3891d8e833"
+    },
+    {
+      "repo": "WhiskeySockets/Baileys",
+      "revision": "81345beb67ca3fb0eb79a2c20cd4ac24da517929",
+      "path": "README.md",
+      "url": "https://github.com/WhiskeySockets/Baileys/blob/81345beb67ca3fb0eb79a2c20cd4ac24da517929/README.md",
+      "sha256": "8e04fbb1c4c5a6a0e1d2e9a70621de9836334e109f9808291d2ccbc1f1d3d18a"
+    },
+    {
+      "repo": "WhiskeySockets/Baileys",
+      "revision": "81345beb67ca3fb0eb79a2c20cd4ac24da517929",
+      "path": "package.json",
+      "url": "https://github.com/WhiskeySockets/Baileys/blob/81345beb67ca3fb0eb79a2c20cd4ac24da517929/package.json",
+      "sha256": "55dd58bf3944a426e2e72f397464a2ef9173f54ae7cbca4082cac743a4a5c178"
+    },
+    {
+      "repo": "WhiskeySockets/libsignal-node",
+      "revision": "bcea72df9ec34d9d9140ab30619cf479c7c144c7",
+      "path": "LICENSE",
+      "url": "https://github.com/WhiskeySockets/libsignal-node/blob/bcea72df9ec34d9d9140ab30619cf479c7c144c7/LICENSE",
+      "sha256": "c61f12da7cdad526bdcbed47a4c0a603e60dbbfdaf8b66933cd088e9132c303f"
+    },
+    {
+      "repo": "WhiskeySockets/libsignal-node",
+      "revision": "bcea72df9ec34d9d9140ab30619cf479c7c144c7",
+      "path": "package.json",
+      "url": "https://github.com/WhiskeySockets/libsignal-node/blob/bcea72df9ec34d9d9140ab30619cf479c7c144c7/package.json",
+      "sha256": "9407c8a9a4f54466991621250af3df24b639948218683b80293c21bfcabc7050"
+    },
+    {
+      "repo": "mautrix/signal",
+      "revision": "6dc9ac3e0c9a31a5ba59287091282d624e83c706",
+      "path": "LICENSE",
+      "url": "https://github.com/mautrix/signal/blob/6dc9ac3e0c9a31a5ba59287091282d624e83c706/LICENSE",
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    },
+    {
+      "repo": "mautrix/signal",
+      "revision": "6dc9ac3e0c9a31a5ba59287091282d624e83c706",
+      "path": "README.md",
+      "url": "https://github.com/mautrix/signal/blob/6dc9ac3e0c9a31a5ba59287091282d624e83c706/README.md",
+      "sha256": "183afd933db6283e886b4b632d63ea5d7a7bc9ea60205cc4cee7c5397ccf3f7b"
+    },
+    {
+      "repo": "mautrix/signal",
+      "revision": "6dc9ac3e0c9a31a5ba59287091282d624e83c706",
+      "path": "ROADMAP.md",
+      "url": "https://github.com/mautrix/signal/blob/6dc9ac3e0c9a31a5ba59287091282d624e83c706/ROADMAP.md",
+      "sha256": "70f822b5ab6f214cb8568dfbf45ff01c1a9b0c585278ea916f5ebf087627f532"
+    },
+    {
+      "repo": "mautrix/signal",
+      "revision": "6dc9ac3e0c9a31a5ba59287091282d624e83c706",
+      "path": "go.mod",
+      "url": "https://github.com/mautrix/signal/blob/6dc9ac3e0c9a31a5ba59287091282d624e83c706/go.mod",
+      "sha256": "97bed1b448996b11e08c464ecca3923dd7062a4a3d54bf8b29cf076753e3e483"
+    },
+    {
+      "repo": "mautrix/whatsapp",
+      "revision": "021504afb01a5f117dd3ffa368f5a3afe8b19f51",
+      "path": "LICENSE",
+      "url": "https://github.com/mautrix/whatsapp/blob/021504afb01a5f117dd3ffa368f5a3afe8b19f51/LICENSE",
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    },
+    {
+      "repo": "mautrix/whatsapp",
+      "revision": "021504afb01a5f117dd3ffa368f5a3afe8b19f51",
+      "path": "README.md",
+      "url": "https://github.com/mautrix/whatsapp/blob/021504afb01a5f117dd3ffa368f5a3afe8b19f51/README.md",
+      "sha256": "5606da7a13cf4e78c44df721625585011870f73f022dc8721452b396ed3335fe"
+    },
+    {
+      "repo": "mautrix/whatsapp",
+      "revision": "021504afb01a5f117dd3ffa368f5a3afe8b19f51",
+      "path": "go.mod",
+      "url": "https://github.com/mautrix/whatsapp/blob/021504afb01a5f117dd3ffa368f5a3afe8b19f51/go.mod",
+      "sha256": "fecafca649cac994681f56a28fb3f6a6f1fd10fcdbcf07099183d4cf076a1288"
+    },
+    {
+      "repo": "mollyim/mollyim-android",
+      "revision": "892d6264ba007b5458a8b74cf9183c665f1f17a1",
+      "path": "LICENSE",
+      "url": "https://github.com/mollyim/mollyim-android/blob/892d6264ba007b5458a8b74cf9183c665f1f17a1/LICENSE",
+      "sha256": "4df3c306dddaaf4baffdff5ca820cc679ac8cd6dc263c6a74517783e42fa7a3b"
+    },
+    {
+      "repo": "mollyim/mollyim-android",
+      "revision": "892d6264ba007b5458a8b74cf9183c665f1f17a1",
+      "path": "README.md",
+      "url": "https://github.com/mollyim/mollyim-android/blob/892d6264ba007b5458a8b74cf9183c665f1f17a1/README.md",
+      "sha256": "318ac2b15e80ebc9e3473c177ba4a54dc7e5e2e90fef53367f5e4dff89899738"
+    },
+    {
+      "repo": "pedroslopez/whatsapp-web.js",
+      "revision": "064a3d5a5a3dce1281a6a12740b5a7051339d154",
+      "path": "LICENSE",
+      "url": "https://github.com/pedroslopez/whatsapp-web.js/blob/064a3d5a5a3dce1281a6a12740b5a7051339d154/LICENSE",
+      "sha256": "c392588658e638d0d415b7552cd987f18994bf6acfc58a2bd4b7a39107dae4dc"
+    },
+    {
+      "repo": "pedroslopez/whatsapp-web.js",
+      "revision": "064a3d5a5a3dce1281a6a12740b5a7051339d154",
+      "path": "README.md",
+      "url": "https://github.com/pedroslopez/whatsapp-web.js/blob/064a3d5a5a3dce1281a6a12740b5a7051339d154/README.md",
+      "sha256": "b00c916848a2e1a6017c42c017674f9372bab59904aab89e130c1cb979ee43d3"
+    },
+    {
+      "repo": "pedroslopez/whatsapp-web.js",
+      "revision": "064a3d5a5a3dce1281a6a12740b5a7051339d154",
+      "path": "package.json",
+      "url": "https://github.com/pedroslopez/whatsapp-web.js/blob/064a3d5a5a3dce1281a6a12740b5a7051339d154/package.json",
+      "sha256": "b3d91f4613b612ab466d3601e9284eb95511723ffd537745107c70f93dca596c"
+    },
+    {
+      "repo": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "LICENSE",
+      "url": "https://github.com/signalapp/Signal-Android/blob/6e9dddc01f1b26e608ac683807c51e139c141ed2/LICENSE",
+      "sha256": "4df3c306dddaaf4baffdff5ca820cc679ac8cd6dc263c6a74517783e42fa7a3b"
+    },
+    {
+      "repo": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "README.md",
+      "url": "https://github.com/signalapp/Signal-Android/blob/6e9dddc01f1b26e608ac683807c51e139c141ed2/README.md",
+      "sha256": "299c559094c6b1111d9ccb8942ccd09532987dcfa6909c34645507d1f2cc65d5"
+    },
+    {
+      "repo": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "build.gradle.kts",
+      "url": "https://github.com/signalapp/Signal-Android/blob/6e9dddc01f1b26e608ac683807c51e139c141ed2/build.gradle.kts",
+      "sha256": "f3fbc6b5e28c27f6923ba6c03d2b149df8df024a024896d918a919b7b09748c7"
+    },
+    {
+      "repo": "signalapp/libsignal",
+      "revision": "fc90b90fa2b9c37822fa47ba0e0dcdf387a0c071",
+      "path": "LICENSE",
+      "url": "https://github.com/signalapp/libsignal/blob/fc90b90fa2b9c37822fa47ba0e0dcdf387a0c071/LICENSE",
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    },
+    {
+      "repo": "signalapp/libsignal",
+      "revision": "fc90b90fa2b9c37822fa47ba0e0dcdf387a0c071",
+      "path": "README.md",
+      "url": "https://github.com/signalapp/libsignal/blob/fc90b90fa2b9c37822fa47ba0e0dcdf387a0c071/README.md",
+      "sha256": "6b4d0a158971c7cf38dc359383e963531d35305ad045cc3400ca9a7887edc1eb"
+    },
+    {
+      "repo": "tdlib/td",
+      "revision": "4c6377aa7386c39217878a9a56d581922ad37ca4",
+      "path": "LICENSE_1_0.txt",
+      "url": "https://github.com/tdlib/td/blob/4c6377aa7386c39217878a9a56d581922ad37ca4/LICENSE_1_0.txt",
+      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+    },
+    {
+      "repo": "tdlib/td",
+      "revision": "4c6377aa7386c39217878a9a56d581922ad37ca4",
+      "path": "README.md",
+      "url": "https://github.com/tdlib/td/blob/4c6377aa7386c39217878a9a56d581922ad37ca4/README.md",
+      "sha256": "732ec8c2c1f47a21dde8e70a0410c8023b12f53df5f47033d43f0656dcea2777"
+    },
+    {
+      "repo": "tdlib/td",
+      "revision": "4c6377aa7386c39217878a9a56d581922ad37ca4",
+      "path": "td/generate/scheme/td_api.tl",
+      "url": "https://github.com/tdlib/td/blob/4c6377aa7386c39217878a9a56d581922ad37ca4/td/generate/scheme/td_api.tl",
+      "sha256": "d8c530565eb7b908ee7f40580ccc468670ac87b0f6f4a8c141f84e25dcb6a2e9"
+    },
+    {
+      "repo": "threema-ch/threema-android",
+      "revision": "d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d",
+      "path": "LICENSE.txt",
+      "url": "https://github.com/threema-ch/threema-android/blob/d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d/LICENSE.txt",
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    },
+    {
+      "repo": "threema-ch/threema-android",
+      "revision": "d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d",
+      "path": "README.md",
+      "url": "https://github.com/threema-ch/threema-android/blob/d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d/README.md",
+      "sha256": "9e562c897a54f3fe3c3e9699ff2f1bc2f26416831cd453b25ef028d7de30be35"
+    },
+    {
+      "repo": "threema-ch/threema-android",
+      "revision": "d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d",
+      "path": "build.gradle.kts",
+      "url": "https://github.com/threema-ch/threema-android/blob/d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d/build.gradle.kts",
+      "sha256": "8e84ce71d06e22b959457780a2ffe68b71674b501662b6b7e50e4e322fe6f7c7"
+    },
+    {
+      "repo": "threema-ch/threema-android",
+      "revision": "d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d",
+      "path": "domain/libthreema/Cargo.toml",
+      "url": "https://github.com/threema-ch/threema-android/blob/d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d/domain/libthreema/Cargo.toml",
+      "sha256": "7cdc179f4e5c73831c279a6c25e54fb1ba2d0127bb4f384503a051e1f5f1e2be"
+    },
+    {
+      "repo": "threema-ch/threema-android",
+      "revision": "d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d",
+      "path": "domain/libthreema/lib/Cargo.toml",
+      "url": "https://github.com/threema-ch/threema-android/blob/d44a2b53b2ea2c0bf1065bdaa96987570e5b4e6d/domain/libthreema/lib/Cargo.toml",
+      "sha256": "285f31f4a5cce56314c560fd69d4324a63c1f289355778f3f28127ef0fc61b9c"
+    },
+    {
+      "repo": "threema-ch/threema-desktop",
+      "revision": "93a6615c5567f0cf8371619dc1a5e888eed1d0b6",
+      "path": "LICENSE.txt",
+      "url": "https://github.com/threema-ch/threema-desktop/blob/93a6615c5567f0cf8371619dc1a5e888eed1d0b6/LICENSE.txt",
+      "sha256": "76a97c878c9c7a8321bb395c2b44d3fe2f8d81314d219b20138ed0e2dddd5182"
+    },
+    {
+      "repo": "threema-ch/threema-desktop",
+      "revision": "93a6615c5567f0cf8371619dc1a5e888eed1d0b6",
+      "path": "README.md",
+      "url": "https://github.com/threema-ch/threema-desktop/blob/93a6615c5567f0cf8371619dc1a5e888eed1d0b6/README.md",
+      "sha256": "45f23ec981ae9d04672a82a4adba0b456a1c4a4e3e8bc56c73487d7b31741d69"
+    },
+    {
+      "repo": "threema-ch/threema-desktop",
+      "revision": "93a6615c5567f0cf8371619dc1a5e888eed1d0b6",
+      "path": "docs/README.md",
+      "url": "https://github.com/threema-ch/threema-desktop/blob/93a6615c5567f0cf8371619dc1a5e888eed1d0b6/docs/README.md",
+      "sha256": "c71072242fdd254c912dfaf529b05b711853e7370a0d31066a060b6d7fc0f421"
+    },
+    {
+      "repo": "threema-ch/threema-desktop",
+      "revision": "93a6615c5567f0cf8371619dc1a5e888eed1d0b6",
+      "path": "package.json",
+      "url": "https://github.com/threema-ch/threema-desktop/blob/93a6615c5567f0cf8371619dc1a5e888eed1d0b6/package.json",
+      "sha256": "d95e7080792398b150fff0697783d1ad7df2fdd8ee0815315923b9a8e9a5eca3"
+    },
+    {
+      "repo": "threema-ch/threema-desktop",
+      "revision": "93a6615c5567f0cf8371619dc1a5e888eed1d0b6",
+      "path": "packages/libthreema-wasm/libs/libthreema/lib/Cargo.toml",
+      "url": "https://github.com/threema-ch/threema-desktop/blob/93a6615c5567f0cf8371619dc1a5e888eed1d0b6/packages/libthreema-wasm/libs/libthreema/lib/Cargo.toml",
+      "sha256": "641c78a1c0801982b66c80703bde7263389fa7f45f258435d529e9ba75c88710"
+    },
+    {
+      "repo": "threema-ch/threema-desktop",
+      "revision": "93a6615c5567f0cf8371619dc1a5e888eed1d0b6",
+      "path": "packages/libthreema-wasm/libs/libthreema/threema-protocols/src/md.md",
+      "url": "https://github.com/threema-ch/threema-desktop/blob/93a6615c5567f0cf8371619dc1a5e888eed1d0b6/packages/libthreema-wasm/libs/libthreema/threema-protocols/src/md.md",
+      "sha256": "0703fd1feaf9c45f01241d128ebca2401bd0cda1a97c5ce1c871e26a749c1006"
+    },
+    {
+      "repo": "threema-ch/threema-web",
+      "revision": "f755cff075cba8660bb51b7cf639679a482c5ed5",
+      "path": "LICENSE.txt",
+      "url": "https://github.com/threema-ch/threema-web/blob/f755cff075cba8660bb51b7cf639679a482c5ed5/LICENSE.txt",
+      "sha256": "76a97c878c9c7a8321bb395c2b44d3fe2f8d81314d219b20138ed0e2dddd5182"
+    },
+    {
+      "repo": "threema-ch/threema-web",
+      "revision": "f755cff075cba8660bb51b7cf639679a482c5ed5",
+      "path": "README.md",
+      "url": "https://github.com/threema-ch/threema-web/blob/f755cff075cba8660bb51b7cf639679a482c5ed5/README.md",
+      "sha256": "e88c17ec04a77113be8000286e717fdcb468a2870547dc916d292e854e6e41c6"
+    },
+    {
+      "repo": "threema-ch/threema-web",
+      "revision": "f755cff075cba8660bb51b7cf639679a482c5ed5",
+      "path": "package.json",
+      "url": "https://github.com/threema-ch/threema-web/blob/f755cff075cba8660bb51b7cf639679a482c5ed5/package.json",
+      "sha256": "64e3685a4ed1f52482179935b4595cffbbe89fdac5d38f4e5388d35f2ff8e945"
+    },
+    {
+      "repo": "tulir/libsignal-protocol-go",
+      "revision": "c231dd95d97ec136df1224fa5e4980a8bc39bb56",
+      "path": "LICENSE",
+      "url": "https://github.com/tulir/libsignal-protocol-go/blob/c231dd95d97ec136df1224fa5e4980a8bc39bb56/LICENSE",
+      "sha256": "09f9333d941468c9d82ac9e2bf6b0b9085c52b50382b9fbb3806f586d502b719"
+    },
+    {
+      "repo": "tulir/whatsmeow",
+      "revision": "1eec1136a50b2ef148b05f1819e77a9d989e0457",
+      "path": "LICENSE",
+      "url": "https://github.com/tulir/whatsmeow/blob/1eec1136a50b2ef148b05f1819e77a9d989e0457/LICENSE",
+      "sha256": "32ee9dbf6196874fc9d406c54a888a6c4cbb9aa4a7f35b46befeaff43a78fe85"
+    },
+    {
+      "repo": "tulir/whatsmeow",
+      "revision": "1eec1136a50b2ef148b05f1819e77a9d989e0457",
+      "path": "README.md",
+      "url": "https://github.com/tulir/whatsmeow/blob/1eec1136a50b2ef148b05f1819e77a9d989e0457/README.md",
+      "sha256": "027b3da3b6d4d914ace426715b3cda7cf3365c27b704b400fb58a34e74864d99"
+    },
+    {
+      "repo": "tulir/whatsmeow",
+      "revision": "1eec1136a50b2ef148b05f1819e77a9d989e0457",
+      "path": "call.go",
+      "url": "https://github.com/tulir/whatsmeow/blob/1eec1136a50b2ef148b05f1819e77a9d989e0457/call.go",
+      "sha256": "33251d2f5c71fcead25e8e687d7debccc2a8cc6a7788ea8cfc1f1a014545f544"
+    },
+    {
+      "repo": "tulir/whatsmeow",
+      "revision": "1eec1136a50b2ef148b05f1819e77a9d989e0457",
+      "path": "client.go",
+      "url": "https://github.com/tulir/whatsmeow/blob/1eec1136a50b2ef148b05f1819e77a9d989e0457/client.go",
+      "sha256": "c556999a9876637566930ea13a73cf4e2326a042e395bf28340e118f4049fb48"
+    },
+    {
+      "repo": "tulir/whatsmeow",
+      "revision": "1eec1136a50b2ef148b05f1819e77a9d989e0457",
+      "path": "go.mod",
+      "url": "https://github.com/tulir/whatsmeow/blob/1eec1136a50b2ef148b05f1819e77a9d989e0457/go.mod",
+      "sha256": "47491ea45688fe44d902fac53816f324703e1af726dd2f55639cf6757c8ee4a2"
+    },
+    {
+      "repo": "tulir/whatsmeow",
+      "revision": "1eec1136a50b2ef148b05f1819e77a9d989e0457",
+      "path": "newsletter.go",
+      "url": "https://github.com/tulir/whatsmeow/blob/1eec1136a50b2ef148b05f1819e77a9d989e0457/newsletter.go",
+      "sha256": "433947bae1e232033533555161f7400883b979d32a81767c2edb77abaa6100db"
+    },
+    {
+      "repo": "tulir/whatsmeow",
+      "revision": "1eec1136a50b2ef148b05f1819e77a9d989e0457",
+      "path": "send.go",
+      "url": "https://github.com/tulir/whatsmeow/blob/1eec1136a50b2ef148b05f1819e77a9d989e0457/send.go",
+      "sha256": "6b425b162c40943383cfbea554d3e6585944810ad1768d0e702a320f1a3f7dcb"
+    },
+    {
+      "repo": "tulir/whatsmeow",
+      "revision": "1eec1136a50b2ef148b05f1819e77a9d989e0457",
+      "path": "store/sqlstore/container.go",
+      "url": "https://github.com/tulir/whatsmeow/blob/1eec1136a50b2ef148b05f1819e77a9d989e0457/store/sqlstore/container.go",
+      "sha256": "4222d5c8e7775ea471a058a408dabc69088835b931b62760e805ba413f13cfc1"
+    },
+    {
+      "repo": "TelegramMessenger/tgcalls",
+      "revision": "3a85cd9bfd279ca8aa6f2579e1d2958c75ad03e1",
+      "path": "README.md",
+      "url": "https://github.com/TelegramMessenger/tgcalls/blob/3a85cd9bfd279ca8aa6f2579e1d2958c75ad03e1/README.md",
+      "sha256": "cf3760c408bd21e731e82da213c6b0c2979103606adfe3768ff2d570820f127a"
+    },
+    {
+      "repo": "TelegramMessenger/tgcalls",
+      "revision": "3a85cd9bfd279ca8aa6f2579e1d2958c75ad03e1",
+      "path": "LICENSE",
+      "url": "https://github.com/TelegramMessenger/tgcalls/blob/3a85cd9bfd279ca8aa6f2579e1d2958c75ad03e1/LICENSE",
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+    },
+    {
+      "repo": "signalapp/ringrtc",
+      "revision": "84c5b2aff246392b365d73d6628529a149d6aed2",
+      "path": "README.md",
+      "url": "https://github.com/signalapp/ringrtc/blob/84c5b2aff246392b365d73d6628529a149d6aed2/README.md",
+      "sha256": "a278d01a7e8f97fb4a979730a6b8a35efe1afdf14ebbb39c05afbefa1113d891"
+    },
+    {
+      "repo": "signalapp/ringrtc",
+      "revision": "84c5b2aff246392b365d73d6628529a149d6aed2",
+      "path": "LICENSE",
+      "url": "https://github.com/signalapp/ringrtc/blob/84c5b2aff246392b365d73d6628529a149d6aed2/LICENSE",
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    }
+  ],
+  "dependency_archives": [
+    {
+      "module": "go.mau.fi/libsignal",
+      "version": "v0.2.2",
+      "url": "https://proxy.golang.org/go.mau.fi/libsignal/@v/v0.2.2.zip",
+      "archive_sha256": "12b60a71250f3996749acb2ba454a34d360801ef314d3e32c7dbb4da240a807b",
+      "license_path": "go.mau.fi/libsignal@v0.2.2/LICENSE",
+      "license_sha256": "09f9333d941468c9d82ac9e2bf6b0b9085c52b50382b9fbb3806f586d502b719",
+      "observed_license": "GPL-3.0"
+    },
+    {
+      "module": "libsignal",
+      "version": "6.0.0",
+      "url": "https://registry.npmjs.org/libsignal/-/libsignal-6.0.0.tgz",
+      "archive_sha256": "121278ea39d5bceb6efeb5e5daab1a790b044840be6e117ae74ec74e82d72ba7",
+      "license_path": "package/LICENSE",
+      "license_sha256": "c61f12da7cdad526bdcbed47a4c0a603e60dbbfdaf8b66933cd088e9132c303f",
+      "observed_license": "GPL-3.0",
+      "scope": "Concrete version checked; Baileys declares ^6.0.0, not a fully resolved release SBOM."
+    }
+  ]
+}
