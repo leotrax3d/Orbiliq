@@ -1,6 +1,6 @@
 # Providervertrag und Capability-Katalog
 
-Stand: 27.10.2026. Normativer Entwurf; Kotlin-Beispiele sind Signaturskizzen, kein kompilierter SDK-Code. [Gesamtarchitektur](README.md).
+Stand: 27.10.2026. Normativer Zielvertrag; Kotlin-Beispiele sind Signaturskizzen. Der inzwischen kompilierte Kernvertrag und seine bewusst noch offenen Funktionsfamilien sind unter [Domain Model und Provider API](domain-model.md) beschrieben. [Gesamtarchitektur](README.md).
 
 ## Vertrag und Lebenszyklus
 

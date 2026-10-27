@@ -1,7 +1,7 @@
 # ADR 0004: Persistente Inbox/Outbox mit explizit unbekannter Versandwirkung
 
 - Datum: 27.10.2026
-- Status: Angenommen als Architekturentscheidung; noch nicht implementiert
+- Status: Angenommen; erste Implementierung in core:data (siehe Sync-Engine-Dokumentation)
 - Grundlage: [Gesamtarchitektur](../architecture/README.md), [Providervertrag](../architecture/provider-contract.md), [ADR 0001](0001-messenger-integration-strategy.md)
 
 ## Kontext
@@ -25,3 +25,10 @@ Die konkreten Abläufe und Akzeptanzkriterien sind in der Gesamtarchitektur besc
 ## Revision
 
 Erneut bewerten, wenn ein Implementierungsnachweis die Annahmen widerlegt oder neue Plattform-/Providerbedingungen eine Änderung erzwingen. Änderungen erhalten einen nachfolgenden ADR mit Verweis auf diese Entscheidung.
+
+## Implementierungsstand Prompt 7
+
+Persistente Queue, Commit vor Dispatch/ACK, Backoff und Reconciliation sind umgesetzt.
+Accountbesitz wird aktuell durch genau einen App-Scope-Koordinator pro Store gewährleistet;
+prozessübergreifende Leases und Android-Scheduler sind noch nicht implementiert.
+Siehe [Sync Engine](../architecture/sync-engine.md) für Vertrag und Grenzen.

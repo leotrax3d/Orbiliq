@@ -16,8 +16,13 @@ android {
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    buildTypes {
+        debug {
+            buildConfigField("boolean", "MOCK_MESSENGER", providers.gradleProperty("orbiliq.mock").orElse("false").get().toBoolean().toString())
+        }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 }
 kotlin { jvmToolchain(17) }
 dependencies {
@@ -35,5 +40,6 @@ dependencies {
     androidTestImplementation(libs.compose.test)
     androidTestImplementation(libs.test.runner)
     androidTestImplementation(libs.test.junit)
+    debugImplementation(project(":core:provider-mock"))
     debugImplementation(libs.compose.test.manifest)
 }

@@ -30,7 +30,7 @@ fun InboxRoute(repository: ConversationRepository) {
             }
         } else {
             LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-                items(conversations, key = { "${it.ref.accountId.length}:${it.ref.accountId}${it.ref.remoteConversationId}" }) { conversation ->
+                items(conversations, key = { "${it.ref.accountId.value.length}:${it.ref.accountId.value}${it.ref.remoteConversationId}" }) { conversation ->
                     ListItem { Text(conversation.title) }
                 }
             }

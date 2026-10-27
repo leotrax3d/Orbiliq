@@ -1,7 +1,7 @@
 # Orbiliq
 
 Datenschutzorientierter Unified-Messenger für Android. Aktuell: Kotlin-/Compose-Grundgerüst mit Material 3 Expressive, Dynamic Color und Hell-/Dunkelmodus.
-Es sind **keine Messenger integriert**; die Inbox erklärt diesen Zustand.
+Es sind **keine echten Messenger integriert**. Ein optionaler lokaler Mock-Messenger ermöglicht Entwicklung ohne Account und Netzwerk.
 Keine Netzwerkberechtigung, Tracker oder Play-Services-Pflicht.
 
 ## Build nach einem Clean Checkout
@@ -36,9 +36,25 @@ Die UI-Prüfung startet die echte Activity samt Hilt-Graph und prüft den Leerzu
 JVM-Ergebnisse stehen unter `<modul>/build/reports/tests/`, Android-Ergebnisse unter
 `app/build/reports/androidTests/`, Lint unter `app/build/reports/lint-results-debug.html`.
 
+## Lokaler Mock-/Test-Messenger
+
+```sh
+./gradlew --offline :core:provider-mock:test
+./gradlew --offline :app:assembleDebug -Porbiliq.mock=true
+```
+
+Der Debug-Schalter zeigt zwei als `[Mock]` markierte Chats in der Inbox.
+Ohne Schalter bleibt der normale Leerzustand bestehen; Release enthält den Mock nicht.
+Login, Kontakte/Gruppen, Nachrichten/Medien und Fehler lassen sich über die Provider-API
+steuern. Sieben wiederverwendbare Szenarien decken Unterhaltung, Medien, Offline-Recovery,
+unklare Versandwirkung, Revisionskonflikte, Capabilitywechsel und Sync-Gaps ab.
+[API-Beispiele, Zeitsteuerung und Grenzen](docs/architecture/mock-provider.md).
+`--offline` beim Build setzt bereits vorhandene Gradle-/SDK-Abhängigkeiten voraus.
+
 ## Struktur und Entwicklung
 
-[Implementierte Architektur](docs/architecture/foundation.md),
+[Android Foundation](docs/architecture/foundation.md),
+[Domain Model und Provider API](docs/architecture/domain-model.md),
 [Zielarchitektur](docs/architecture/README.md), [Projektkontext](docs/PROJECT_CONTEXT.md),
 [Beitragen](CONTRIBUTING.md), [Sicherheit](SECURITY.md).
 Versionen liegen im [Version Catalog](gradle/libs.versions.toml).
@@ -59,3 +75,12 @@ Workflow unter Actions → Android → Run workflow manuell starten.
 Ein lokaler Build allein ist kein Nachweis einer erfolgreichen GitHub-Ausführung.
 Automatische Dependabot-Zeitpläne sind ebenfalls entfernt; Updates werden nach
 CONTRIBUTING manuell geprüft, bis automatisierte Jobs ausdrücklich wieder gewünscht sind.
+
+## Lokale Persistenz
+
+Mit `-Porbiliq.mock=true` persistiert der Debug-Mock jetzt seine Domainprojektion
+verschlüsselt in Android-SQLite und stellt sie nach Wiederöffnung wieder her.
+Keystore, atomarer Secret-Vault, Migrationen, Pending Operations, Kontaktzuordnungen,
+Aufbewahrung und lokale Archive sind vorbereitet bzw. über Repositoryports implementiert.
+Medienbytes bleiben bisher flüchtig. Architektur, 64-MiB-Prototypgrenze und noch offene
+Android-Gerätenachweise stehen im [Speicher-/Sicherheitskonzept](docs/architecture/local-storage.md).

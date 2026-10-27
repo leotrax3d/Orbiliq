@@ -50,6 +50,9 @@ Pfeile bedeuten Compile-Abhängigkeiten, nicht die Richtung jedes Laufzeitaufruf
 
 Signal-/WhatsApp-Backends wären eigenständige, separat gebaute Companion-Apps nach Freigabe; ihre Implementierung gehört nicht stillschweigend in den Haupt-APK-Graph. Nicht jeder Tabellenposten muss im ersten Commit ein eigenes leeres Modul werden: zuerst vertikaler Telegram-Textpfad, weitere Module mit echter Verantwortung ergänzen. Die Grenzen bleiben verbindlich.
 
+Implementierter Modell-/API-Stand: [Domain Model und Provider API](domain-model.md).
+Lokales Testbackend mit Debug-Injection: [Mock-Messenger](mock-provider.md).
+
 ## Domain Layer: Identitäten und fachliche Regeln
 
 - `ProviderId` ist ein offener stabiler String, kein Enum aller Messenger. `AccountId` ist eine lokale UUID für genau eine Installation/Session eines Providers.
@@ -201,3 +204,10 @@ Im ursprünglichen Architekturpaket wurden Dokumentation, lokale Verweise und En
 - [Android: Offline-first](https://developer.android.com/topic/architecture/data-layer/offline-first): lokale Lesequelle, asynchrone Writes und persistente Nachholarbeit.
 - [SQLCipher Android](https://github.com/sqlcipher/sqlcipher-android): Room-Anbindung; [Migration zum aktuellen Artefakt](https://www.zetetic.net/sqlcipher/sqlcipher-for-android-migration/).
 - Weitere Provider-/Android-Belege und ihre Recherchegrenzen stehen im [bestehenden Quellenregister](../research/07-sources.md). Zeitabhängige Service-/Target-SDK-Regeln vor Umsetzung erneut prüfen.
+
+Implementierungsstand Arbeitspaket 6: [Lokale Persistenz und Sicherheitskonzept](local-storage.md),
+mit ausdrücklich begrenzter erster SQLite-/AES-GCM-Umsetzung gemäß ADR 0012.
+
+[Unified Contacts](unified-contacts.md) beschreibt das implementierte konservative
+Matching, manuelle Korrekturen und persistente Ausschlüsse (ADR 0013).
+- [Unified Inbox und Personen-Conversations](unified-communication.md)

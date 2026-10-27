@@ -31,7 +31,7 @@ class InboxViewModelTest {
                         model.conversations.collect()
                     }
                     runCurrent()
-                    val conversation = ConversationSummary(ConversationRef("account", "chat"), "Test")
+                    val conversation = ConversationSummary(ConversationRef(org.orbiliq.core.model.AccountId("account"), "chat"), "Test")
                     localInbox.value = listOf(conversation)
                     runCurrent()
                     assertEquals(listOf(conversation), model.conversations.value)
