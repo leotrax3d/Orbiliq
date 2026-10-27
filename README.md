@@ -57,3 +57,5 @@ bleibt vorbereitet; ein erfolgreicher GitHub-Lauf ist noch nicht nachgewiesen.
 Nach Verfügbarkeit von Minuten unter Settings → Actions wieder aktivieren und den
 Workflow unter Actions → Android → Run workflow manuell starten.
 Ein lokaler Build allein ist kein Nachweis einer erfolgreichen GitHub-Ausführung.
+Automatische Dependabot-Zeitpläne sind ebenfalls entfernt; Updates werden nach
+CONTRIBUTING manuell geprüft, bis automatisierte Jobs ausdrücklich wieder gewünscht sind.

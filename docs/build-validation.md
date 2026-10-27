@@ -65,7 +65,9 @@ Entwicklung signiert, keine sicherheitsgeprüfte Messenger-Releaseversion.
   oder einem geeigneten anderen Rechner.
 - GitHub-CI: Repository privat angelegt, Actions wegen fehlender CI-Minuten auf
   Nutzerwunsch deaktiviert. Workflow ist vorbereitet, aber kein erfolgreicher
-  GitHub-Lauf wird behauptet.
+  GitHub-Lauf wird behauptet. Nach dem ersten Push startete GitHub trotzdem zwei
+  dynamische Dependabot-Prüfungen. Diese wurden abgebrochen und die Dependabot-
+  Zeitplanung entfernt. Der Android-Buildworkflow wurde nicht gestartet.
 - Keine Provider-, Konto-, Verschlüsselungs-, Sync- oder Hintergrundfreigabe.
 
 Damit bleiben die ursprünglichen DoD-Nachweise „Start auf Android“ und „CI erfolgreich“
