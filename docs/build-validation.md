@@ -28,7 +28,33 @@ Der Wrapper prüft zusätzlich den festgelegten SHA-256-Hash der Gradle-Distribu
 - Vollständiger erster Build erfolgreich: Debug-APK, `test`, `lintDebug` und
   `assembleDebugAndroidTest`. Lint: 0 Fehler; zunächst 7 Hinweise. Launcher-Icon und
   Backupregeln wurden daraufhin ergänzt, Compose-Gerätetest auf die v2-API migriert.
-- Clean-Checkout-Nachweis für diesen letzten Stand: Abschlussprüfung läuft.
+- Clean-Checkout-Nachweis bestanden: Commit `adea187` in ein neues Verzeichnis
+  geklont, ohne `local.properties`, `.gradle` oder Build-Ausgaben aus dem Projekt.
+  SDK ausschließlich über `ANDROID_HOME`, JDK über `JAVA_HOME` bereitgestellt.
+  Bereits heruntergeladene globale Gradle-Abhängigkeiten wurden wiederverwendet;
+  der Build-Output-Cache war explizit deaktiviert. Keine Schreibflags für Locks oder
+  Prüfsummen, keine Änderung versionierter Dateien nach dem Build.
+- Ergebnis: **BUILD SUCCESSFUL in 4m 31s**, 183 Aufgaben ausgeführt, vier Tests
+  erfolgreich, Debug- und Instrumentation-Test-APK gebaut. Beide Compose-Gerätetests
+  einschließlich der v2-Test-API kompilieren; sie wurden nicht auf Android ausgeführt.
+- Finales Lint: **0 Fehler, 7 Hinweise**. Fünf betreffen verfügbare Updates für
+  Gradle, Lifecycle und Coroutines; die dokumentierte, kompatible Versionskombination
+  bleibt für diesen Build fixiert. Zwei kosmetische Hinweise betreffen den redundanten
+  API-26-Iconordner und die noch fehlende monochrome Iconebene. Kein Hinweis wurde
+  unterdrückt. Die Iconverfeinerung gehört zur folgenden UI-Ausarbeitung.
+
+Exakter Befehl im frischen Checkout:
+
+```sh
+./gradlew --no-daemon --no-build-cache :app:assembleDebug test :app:lintDebug :app:assembleDebugAndroidTest
+```
+
+Die abschließenden Dokumentationsänderungen ändern den geprüften Code nicht.
+Die mit `apksigner` geprüfte APK ist lokal zusätzlich unter
+`build/distributions/orbiliq-0.1.0-debug.apk` gesichert (nicht versioniert).
+SHA-256: `972e499a022da2f217c2d215f94041aaa73e752898e45b22c1b98ef004b0d22b`.
+Buildlog, Lintbericht, Test-APK und SHA256SUMS liegen daneben. Die APK ist nur für
+Entwicklung signiert, keine sicherheitsgeprüfte Messenger-Releaseversion.
 
 ## Bewusst nicht als bestanden ausgewiesen
 

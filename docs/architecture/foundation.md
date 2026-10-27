@@ -52,5 +52,5 @@ Offizielle Grundlagen: [AGP-Kompatibilität](https://developer.android.com/build
 
 ## Prüfstatus
 
-Der konkrete lokale Nachweis wird in `docs/build-validation.md` festgehalten.
+Der konkrete lokale Nachweis steht in [Buildvalidierung](../build-validation.md): Clean Checkout, Debug-/Test-APK, vier JVM-Tests und Lint erfolgreich. Gerätetests noch nicht ausgeführt.
 Ein konfigurierter Workflow bedeutet noch keinen erfolgreichen GitHub-Lauf.

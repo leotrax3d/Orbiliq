@@ -37,8 +37,13 @@ Eine echte Activity zeigt einen erklärten Leerzustand, Hilt liefert das noch un
 Repository. StateFlow/ViewModel, lifecyclebewusste Compose-Beobachtung, Expressive Theme,
 Dynamic Color und Edge-to-edge bilden die UI-Grundlage. Keine Fakechats oder Login-Attrappen.
 MIT, README, CONTRIBUTING, SECURITY, Gitignore, Dependency-Management und GitHub-CI sind angelegt.
-Weitere Zielmodule werden erst mit realen Implementierungen ergänzt. Konkrete Testresultate
-und verbleibende Infrastrukturgrenzen stehen in `docs/build-validation.md`.
+Weitere Zielmodule werden erst mit realen Implementierungen ergänzt. Der Build aus einem
+frischen Checkout ohne Build-Output-Cache ist erfolgreich; Debug-APK, Test-APK,
+vier JVM-Tests und Lint (0 Fehler, 7 nicht blockierende Hinweise) sind nachgewiesen.
+Start-/UI-Gerätetests sind nicht ausgeführt: kein Gerät angeschlossen, Emulator auf
+Nutzerwunsch auf diesem Laptop ausgeschlossen. Das private GitHub-Repository ist
+`leotrax3d/Orbiliq`; Actions bleibt wegen fehlender CI-Minuten deaktiviert.
+[Prüfprotokoll](build-validation.md) hält Befehle, APK-Hash und Grenzen fest.
 
 ## Bekannte Grenzen und nächste Arbeitspakete
 
