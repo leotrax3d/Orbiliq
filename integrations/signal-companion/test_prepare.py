@@ -4,21 +4,23 @@ Set SIGNAL_UPSTREAM_SOURCE to an existing Git checkout containing REVISION.
 Tests extract pristine tracked files, never modify that checkout or use accounts.
 """
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
+import tarfile
 import unittest
 
 from prepare import REVISION, SECURITY_FILES, block_primary_registration, verify_security_manifest, security_policy_digest, validate_wire_limit
+from verify_artifact import verify_archive
 
 SOURCE = os.environ.get("SIGNAL_UPSTREAM_SOURCE")
 REGISTRATION = "feature/registration/src/main/java/org/signal/registration/"
 INPUTS = (SECURITY_FILES[6], SECURITY_FILES[7], REGISTRATION + "RegistrationActivity.kt",
           REGISTRATION + "RegistrationViewModel.kt",
           "lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/messages/SignalServiceMessageLimits.kt")
-
 
 @unittest.skipUnless(SOURCE, "Set SIGNAL_UPSTREAM_SOURCE for pinned upstream integration tests")
 class RegistrationGeneratorTest(unittest.TestCase):
@@ -77,7 +79,6 @@ class RegistrationGeneratorTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "wire limit changed"):
             validate_wire_limit(self.root)
 
-
 class SourceManifestTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -118,6 +119,45 @@ class SourceManifestTest(unittest.TestCase):
         self.save()
         with self.assertRaises(RuntimeError):
             verify_security_manifest(self.root)
+
+
+class CorrespondingSourceArchiveTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "source.tar.gz"
+
+    def archive(self, stale=False, tampered=False, duplicate=False):
+        files = {name: b"synthetic source fixture" for name in SECURITY_FILES}
+        manifest = {"version": 2, "revision": REVISION, "policyDigest": "obsolete" if stale else security_policy_digest(),
+                    "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
+        if tampered:
+            files[SECURITY_FILES[0]] = b"tampered fixture"
+        files["ORBILIQ-SECURITY.json"] = json.dumps(manifest).encode()
+        with tarfile.open(self.path, "w:gz") as archive:
+            for name, data in files.items():
+                info = tarfile.TarInfo("./" + name)
+                info.size = len(data)
+                archive.addfile(info, io.BytesIO(data))
+            if duplicate:
+                info = tarfile.TarInfo("./ORBILIQ-SECURITY.json")
+                info.size = len(files["ORBILIQ-SECURITY.json"])
+                archive.addfile(info, io.BytesIO(files["ORBILIQ-SECURITY.json"]))
+
+    def test_current_archive_is_accepted_without_extracting_paths(self):
+        self.archive()
+        self.assertEqual(security_policy_digest(), verify_archive(self.path))
+
+    def test_stale_or_tampered_source_is_rejected(self):
+        for option in (dict(stale=True), dict(tampered=True)):
+            self.archive(**option)
+            with self.assertRaises(ValueError):
+                verify_archive(self.path)
+
+    def test_duplicate_security_member_is_rejected(self):
+        self.archive(duplicate=True)
+        with self.assertRaises(ValueError):
+            verify_archive(self.path)
 
 
 if __name__ == "__main__":
