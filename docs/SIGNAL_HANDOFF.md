@@ -2,7 +2,21 @@
 
 Stand: 28.10.2026. Prompt 11 ist **nicht abgeschlossen**.
 
-## Neuester Fortsetzungsstand: Nachrichtenadapter implementiert, Geräteabnahme offen
+## Neuester Fortsetzungsstand: erste Messaging-Geräteabnahme bestanden
+
+**Hardware-Nachweis 28.10.2026, Pixel 10a**, Companion aus Run 40717591141 (`729dfdc`,
+`verify_artifact.py` gegen eigenen Commit bestanden, lokal neu signiert, Signer
+`50c8a5…` identisch zu App/Test/Installation, nur `install -r`), App/Test aus `4f002d0`:
+1. `signalMessaging=denied` (nur Statusfreigabe): kein Nachrichtenzugriff – bestanden.
+2. Nutzer erteilte Nachrichtenfreigabe nativ im Companion (kein neues Linking).
+   `signalMessaging=granted`: stabile Bindung, Fremdbindung abgewiesen – bestanden.
+3. `signalSelfSend=true`: Text an „Notiz an mich“ durch Outbox → Native → Projektion,
+   genau einmal, Wiederholung derselben Command-ID ohne Dublette – bestanden (3,4 s).
+Nicht getestet: Empfang fremder Nachrichten, Prozessneustart mit Messaging,
+fehlendes Netz, Widerruf/Lock, Doze/Hintergrund, Zitate/Reaktionen auf Hardware.
+Reaktionen-Companion: Run 40721700076 (`4f002d0`) noch zu prüfen/installieren.
+
+### Vorheriger Stand
 
 Aktueller Companion-Lauf: **[40717591141](https://github.com/leotrax3d/Orbiliq/actions/runs/40717591141)**,
 Commit `729dfdc` (zusätzlich empfangene Zitat-Antworten). Vorheriger Lauf
