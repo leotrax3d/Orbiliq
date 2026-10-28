@@ -106,7 +106,7 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
     private fun decode(bundle: Bundle): List<SignalText> = rows(bundle).also { require(it.size <= SignalMessagingContract.PAGE_SIZE) }.map {
         SignalText(it.getLong("id"), it.getLong("thread"), requireNotNull(it.getString("sender")), requireNotNull(it.getString("text")),
             it.getBoolean("outgoing"), it.getLong("timestamp"), it.getLong("received"), requireNotNull(it.getString("delivery")), it.getBoolean("supported", true), it.getString("senderName").orEmpty(),
-            it.getLong("replyTo").takeIf { id -> id > 0 }, reactions(it), images(it), files(it))
+            it.getLong("replyTo").takeIf { id -> id > 0 }, reactions(it), images(it), files(it), it.getBoolean("canEdit"), it.getBoolean("canDelete"))
     }
     override suspend fun texts(binding: SignalBinding, thread: Long, beforeId: Long): SignalTextPage {
         val result = call("messageTexts", binding, Bundle().apply { putLong("thread", thread); putLong("beforeId", beforeId) })
@@ -119,8 +119,10 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
         "Rejected" -> SignalSendResult.Rejected
         else -> SignalSendResult.Unknown
     }
-    override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long?, image: String?): SignalSendResult = result(call("messageSend", binding,
-        Bundle().apply { putString("commandId", commandId); putLong("thread", thread); putString("text", text); replyTo?.let { putLong("replyTo", it) }; image?.let { putString("image", it) } }))
+    override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long?, image: String?, edit: Long?): SignalSendResult = result(call("messageSend", binding,
+        Bundle().apply { putString("commandId", commandId); putLong("thread", thread); putString("text", text); replyTo?.let { putLong("replyTo", it) }; image?.let { putString("image", it) }; edit?.let { putLong("edit", it) } }))
+    override suspend fun deleteForEveryone(binding: SignalBinding, thread: Long, message: Long): SignalSendResult = result(call("messageDelete", binding,
+        Bundle().apply { putLong("thread", thread); putLong("message", message) }))
     override suspend fun stageImage(binding: SignalBinding, token: String, jpeg: ByteArray): Boolean = stage(binding, token, jpeg) {}
     private suspend fun stage(binding: SignalBinding, token: String, bytes: ByteArray, extra: Bundle.() -> Unit): Boolean {
         require(bytes.isNotEmpty() && bytes.size <= SignalMessagingContract.MAX_FILE_BYTES)

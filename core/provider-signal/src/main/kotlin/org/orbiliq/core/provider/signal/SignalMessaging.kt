@@ -37,6 +37,9 @@ class SignalText(
     val reactions: List<SignalReaction> = emptyList(),
     val images: List<SignalImage> = emptyList(),
     val files: List<SignalFile> = emptyList(),
+    /** Companion-evaluated with Signal's own rules at export time; re-checked before any send. */
+    val canEdit: Boolean = false,
+    val canDelete: Boolean = false,
 ) {
     init {
         require(id > 0 && thread > 0 && timestamp > 0 && received > 0)
@@ -82,7 +85,7 @@ interface SignalMessagingTransport {
     suspend fun texts(binding: SignalBinding, thread: Long, beforeId: Long = Long.MAX_VALUE): SignalTextPage
     suspend fun lookup(binding: SignalBinding, thread: Long, ids: List<Long>): List<SignalText>
     /** [replyTo] quotes a native message of the same thread; the companion validates it again. */
-    suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long? = null, image: String? = null): SignalSendResult
+    suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long? = null, image: String? = null, edit: Long? = null): SignalSendResult
     suspend fun reconcileText(binding: SignalBinding, commandId: String, thread: Long): SignalSendResult
     /** Sets the own reaction (idempotent: an identical existing reaction is not resent). */
     suspend fun react(binding: SignalBinding, thread: Long, message: Long, emoji: String): SignalSendResult = SignalSendResult.Rejected
@@ -90,6 +93,7 @@ interface SignalMessagingTransport {
     suspend fun image(binding: SignalBinding, thread: Long, message: Long, attachment: Long): ByteArray? = attachment(binding, thread, message, attachment)?.second
     /** MIME type and decrypted bytes of one exported attachment, bounded by [SignalMessagingContract.MAX_FILE_BYTES]. */
     suspend fun attachment(binding: SignalBinding, thread: Long, message: Long, attachment: Long): Pair<String, ByteArray>? = null
+    suspend fun deleteForEveryone(binding: SignalBinding, thread: Long, message: Long): SignalSendResult = SignalSendResult.Rejected
     /** Stages a non-image, non-video file unchanged (the user picked it as a document). */
     suspend fun stageFile(binding: SignalBinding, token: String, bytes: ByteArray, mimeType: String, name: String?): Boolean = false
     /** Hands a JPEG to the companion's encrypted store; true once fully staged under [token]. */

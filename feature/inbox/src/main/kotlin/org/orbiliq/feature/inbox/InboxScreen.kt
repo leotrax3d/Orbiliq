@@ -234,6 +234,8 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
     val timeline by timelineFlow.collectAsStateWithLifecycle(UnifiedTimeline(emptyList(), emptyList()))
     var draft by rememberSaveable(route.conversation.id.value) { mutableStateOf("") }
     var replyId by rememberSaveable(route.conversation.id.value) { mutableStateOf<String?>(null) }
+    var editId by rememberSaveable(route.conversation.id) { mutableStateOf<String?>(null) }
+    var deleteId by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf(false) }
     var archiveDialog by remember { mutableStateOf(false) }
@@ -293,6 +295,11 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (canReply && message.content is MessageContent.Text) TextButton(onClick = { replyId = message.id.value }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Antworten") }
                                 if (canReact) TextButton(onClick = { picking = !picking }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Reagieren") }
+                                val canEdit by produceState(false, message.ref, message.revision, snapshot.syncNotice) { value = outgoing && message.ref != null && model.canEdit(message.id) }
+                                val canDelete by produceState(false, message.ref, message.revision, snapshot.syncNotice) { value = outgoing && message.ref != null && model.canDeleteForEveryone(message.id) }
+                                if (canEdit && message.content is MessageContent.Text) TextButton(onClick = { editId = message.id.value; draft = (message.content as MessageContent.Text).text },
+                                    modifier = Modifier.heightIn(min = 48.dp)) { Text("Bearbeiten") }
+                                if (canDelete) TextButton(onClick = { deleteId = message.id.value }, modifier = Modifier.heightIn(min = 48.dp)) { Text("F\u00fcr alle l\u00f6schen") }
                             }
                             AnimatedVisibility(picking && canReact) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -305,6 +312,12 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                         }
                     }
                 }
+            }
+        }
+        AnimatedVisibility(editId != null) {
+            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Nachricht bearbeiten", Modifier.weight(1f))
+                TextButton(onClick = { editId = null; draft = "" }) { Text("Abbrechen") }
             }
         }
         AnimatedVisibility(replyId != null) {
@@ -345,7 +358,11 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
             FilledIconButton(onClick = {
                 scope.launch {
                     sending = true
-                    try { if (model.send(route, draft, replyId?.let(::MessageId))) { draft = ""; replyId = null } }
+                    try {
+                        val editing = editId
+                        if (editing != null) { if (model.edit(MessageId(editing), draft)) { draft = ""; editId = null } }
+                        else if (model.send(route, draft, replyId?.let(::MessageId))) { draft = ""; replyId = null }
+                    }
                     finally { sending = false }
                 }
             }, enabled = draft.isNotBlank() && !sending && allowed == true,
@@ -353,6 +370,12 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                 if (sending) CircularProgressIndicator(Modifier.size(24.dp)) else MessengerIcon("Send")
             }
         }
+    }
+    deleteId?.let { pendingDelete ->
+        AlertDialog(onDismissRequest = { deleteId = null }, title = { Text("F\u00fcr alle l\u00f6schen?") },
+            text = { Text("Signal ersetzt die Nachricht bei allen Empf\u00e4ngern durch einen L\u00f6schhinweis. Das l\u00e4sst sich nicht r\u00fcckg\u00e4ngig machen.") },
+            confirmButton = { TextButton(onClick = { model.deleteForEveryone(MessageId(pendingDelete)); deleteId = null }) { Text("L\u00f6schen") } },
+            dismissButton = { TextButton(onClick = { deleteId = null }) { Text("Abbrechen") } })
     }
     if (archiveDialog) AlertDialog(onDismissRequest = { archiveDialog = false }, title = { Text(if (archived) "Zurück in die Inbox?" else "Chat archivieren?") },
         text = { Text("Der Verlauf bleibt lokal erhalten und ist über den Ordnerfilter erreichbar.") },

@@ -56,6 +56,28 @@ class UnifiedCommunicationService(
         val session = sessionFor(ref.conversation.accountId)?.takeIf { it.accountId == ref.conversation.accountId } ?: return null
         return session to CapabilityScope.Message(provider, ref)
     }
+    private suspend fun allowed(message: MessageId, operation: OperationKey, text: String? = null): Pair<ProviderSession, CapabilityScope.Message>? {
+        val (session, scope) = reactionScope(message) ?: return null
+        val request = OperationRequest(scope, operation, textLength = text?.length, sizeBytes = text?.toByteArray(Charsets.UTF_8)?.size?.toLong())
+        return (session to scope).takeIf { session.evaluate(request) is Availability.Available }
+    }
+    private suspend fun enqueueFor(session: ProviderSession, scope: CapabilityScope.Message, payload: CommandPayload): Boolean {
+        val revision = session.observeCapabilities(scope).first().revision
+        val time = now()
+        repository.enqueue(ProviderCommand(CommandId.random(), scope.ref.conversation, payload, time, time.plusSeconds(300), revision), null)
+        return true
+    }
+    override suspend fun canEdit(message: MessageId) = allowed(message, Operations.EditText, "x") != null
+    override suspend fun edit(message: MessageId, text: String): Boolean {
+        require(text.isNotBlank())
+        val (session, scope) = allowed(message, Operations.EditText, text) ?: return false
+        return enqueueFor(session, scope, CommandPayload.EditText(scope.ref, text, null))
+    }
+    override suspend fun canDeleteForEveryone(message: MessageId) = allowed(message, Operations.DeleteAll) != null
+    override suspend fun deleteForEveryone(message: MessageId): Boolean {
+        val (session, scope) = allowed(message, Operations.DeleteAll) ?: return false
+        return enqueueFor(session, scope, CommandPayload.Delete(scope.ref, forEveryone = true))
+    }
     override suspend fun canReact(message: MessageId): Boolean {
         val (session, scope) = reactionScope(message) ?: return false
         return session.evaluate(OperationRequest(scope, Operations.React)) is Availability.Available

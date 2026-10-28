@@ -14,7 +14,7 @@ import org.orbiliq.core.provider.api.*
 
 class SignalMessagingProviderFactory(private val transport: SignalMessagingTransport) : ProviderFactory {
     override val descriptor = ProviderDescriptor(ProviderId("signal"), "Signal Companion", "0.3-direct-text-quotes",
-        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive, SignalMessagingSession.FileReceive,
+        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.EditText, Operations.DeleteAll, Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive, SignalMessagingSession.FileReceive,
         Operations.sendMedia(AttachmentKind.File)), ReplayClass.BestEffort)
     override suspend fun open(account: AccountHandle): ProviderSession {
         require(account.account.providerId == descriptor.id)
@@ -52,6 +52,8 @@ class SignalMessagingSession(
     private val firstPageBoundary = mutableMapOf<Long, Long>()
     private val commandMessages = java.util.concurrent.ConcurrentHashMap(previousCommands)
     private val sendGate = Mutex()
+    /** Per-message edit/delete permissions as last reported by the companion. */
+    private val messageRights = java.util.concurrent.ConcurrentHashMap<Long, Pair<Boolean, Boolean>>()
     private val reactionState = previousReactions.filterKeys { it.conversation.accountId == accountId }
         .mapKeys { it.key.remoteMessageId.toLong() }.toMutableMap()
     init {
@@ -138,6 +140,11 @@ class SignalMessagingSession(
             Operations.React to OperationSupport(if (allowed && routeScoped) Availability.Available() else Availability.Restricted(Restriction.Policy),
                 quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security),
             ))
+            (scope as? CapabilityScope.Message)?.ref?.remoteMessageId?.toLongOrNull()?.let { messageRights[it] }?.let { (edit, delete) ->
+                put(Operations.EditText, if (allowed && edit) sendSupport(true) else OperationSupport(Availability.Restricted(Restriction.Policy), security = security))
+                put(Operations.DeleteAll, OperationSupport(if (allowed && delete) Availability.Available() else Availability.Restricted(Restriction.Policy),
+                    quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security))
+            }
             if (remote == null || thread?.direct == false) put(OperationKey("signal.group.title.receive"),
                 OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security))
         }
@@ -208,7 +215,7 @@ class SignalMessagingSession(
                         for (id in chunk) if (found.none { it.id == id }) {
                             val ref = messageRef(thread.id, id)
                             event(ProviderEvent.MessageDeleted(ref, null, commandMessages[ref]), "deleted:$id", "1")
-                            ids.remove(id); revisions.remove("message:$id"); reactionState.remove(id)
+                            ids.remove(id); revisions.remove("message:$id"); reactionState.remove(id); messageRights.remove(id)
                         }
                         found.forEach { checked[it.id] = it }
                     }
@@ -230,6 +237,7 @@ class SignalMessagingSession(
                         revisions.remove("deleted:${text.id}")
                         event(ProviderEvent.MessageUpserted(message, command), "message:${text.id}", "${message.revision}:${command?.value}")
                         ids.add(text.id)
+                        messageRights[text.id] = text.canEdit to text.canDelete
                         val previous = reactionState[text.id].orEmpty()
                         val current = text.reactions.associate { it.actor to it.emoji }
                         for ((actor, emoji) in previous) if (current[actor] != emoji)
@@ -307,6 +315,14 @@ class SignalMessagingSession(
     }
     override suspend fun execute(command: ProviderCommand): DispatchResult = sendGate.withLock {
         (command.payload as? CommandPayload.React)?.let { return react(command, it) }
+        (command.payload as? CommandPayload.EditText)?.let { edit ->
+            val target = edit.message.remoteMessageId.toLongOrNull()?.takeIf { it > 0 && edit.message.conversation == command.route }
+            if (target == null || evaluate(OperationRequest(CapabilityScope.Message(provider, edit.message), Operations.EditText, textLength = edit.text.length,
+                    sizeBytes = edit.text.toByteArray(Charsets.UTF_8).size.toLong())) !is Availability.Available)
+                return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
+            return dispatch(command, edit.text, null, null, Operations.SendText, target)
+        }
+        (command.payload as? CommandPayload.Delete)?.let { return remoteDelete(command, it) }
         (command.payload as? CommandPayload.SendMedia)?.let { media ->
             val prefix = "${accountId.value}:" + if (media.kind == AttachmentKind.File) "stagedfile:" else "staged:"
             val token = media.attachment.value.takeIf { media.kind in setOf(AttachmentKind.Image, AttachmentKind.File) && it.startsWith(prefix) }?.removePrefix(prefix)
@@ -318,7 +334,24 @@ class SignalMessagingSession(
         if (replyTo == -1L) return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
         return dispatch(command, text.text, replyTo, null, text.operation)
     }
-    private suspend fun dispatch(command: ProviderCommand, body: String, replyTo: Long?, image: String?, operation: OperationKey): DispatchResult {
+    private suspend fun remoteDelete(command: ProviderCommand, payload: CommandPayload.Delete): DispatchResult {
+        val thread = command.route.remoteConversationId.toLongOrNull()
+        val message = payload.message.remoteMessageId.toLongOrNull()
+        val scope = CapabilityScope.Message(provider, payload.message)
+        if (!payload.forEveryone || !job.isActive || thread == null || message == null || message <= 0 || command.route.accountId != accountId ||
+            clock.instant() >= command.expiresAt || evaluate(OperationRequest(scope, Operations.DeleteAll)) !is Availability.Available)
+            return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
+        return try {
+            check(transport.binding()?.id == binding.id)
+            when (transport.deleteForEveryone(binding, thread, message)) {
+                is SignalSendResult.Queued -> DispatchResult.Accepted("delete:$message")
+                SignalSendResult.Rejected -> DispatchResult.Rejected(ProviderFailure(FailureCategory.PolicyExpired))
+                SignalSendResult.Unknown -> DispatchResult.OutcomeUnknown("signal.delete.unknown")
+            }
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { DispatchResult.OutcomeUnknown("signal.delete.unknown") }
+    }
+    private suspend fun dispatch(command: ProviderCommand, body: String, replyTo: Long?, image: String?, operation: OperationKey, edit: Long? = null): DispatchResult {
         val thread = command.route.remoteConversationId.toLongOrNull()
         val scope = CapabilityScope.Conversation(provider, command.route)
         if (!job.isActive || thread == null || command.route.accountId != accountId || command.schemaVersion != 1 ||
@@ -332,7 +365,7 @@ class SignalMessagingSession(
             return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
         return try {
             check(transport.binding()?.id == binding.id)
-            when (val result = transport.sendText(binding, command.id.value, thread, body, replyTo, image)) {
+            when (val result = transport.sendText(binding, command.id.value, thread, body, replyTo, image, edit)) {
                 is SignalSendResult.Queued -> {
                     commandMessages[messageRef(thread, result.messageId)] = command.id
                     known.getOrPut(thread) { java.util.concurrent.ConcurrentHashMap.newKeySet<Long>() }.add(result.messageId)
@@ -349,6 +382,11 @@ class SignalMessagingSession(
         return try {
             check(transport.binding()?.id == binding.id)
             val thread = request.route.remoteConversationId.toLong()
+            request.receipt?.takeIf { it.startsWith("delete:") }?.let { receipt ->
+                // Confirmed once the companion no longer exports the message (remote-deleted natively).
+                val id = receipt.removePrefix("delete:").toLong()
+                return if (transport.lookup(binding, thread, listOf(id)).isEmpty()) ReconcileResult.Confirmed(null) else ReconcileResult.StillUnknown
+            }
             request.receipt?.takeIf { it.startsWith("reaction:") }?.let { receipt ->
                 // Reactions are state, not a message: confirmed once the native own reaction matches.
                 val (message, emoji) = receipt.removePrefix("reaction:").split(":", limit = 2).let { it[0].toLong() to it[1] }

@@ -47,6 +47,15 @@ class InboxViewModel(repository: ConversationRepository) : ViewModel() {
         }
     } catch (c: CancellationException) { throw c }
       catch (_: Exception) { _notice.value = "Nachricht konnte nicht gespeichert werden. Bitte erneut versuchen."; false }
+    suspend fun canEdit(message: MessageId) = try { messenger?.canEdit(message) == true } catch (c: CancellationException) { throw c } catch (_: Exception) { false }
+    suspend fun canDeleteForEveryone(message: MessageId) = try { messenger?.canDeleteForEveryone(message) == true } catch (c: CancellationException) { throw c } catch (_: Exception) { false }
+    suspend fun edit(message: MessageId, text: String): Boolean = try {
+        (messenger?.edit(message, text.trim()) == true).also { if (!it) _notice.value = "Bearbeiten nicht mehr möglich." }
+    } catch (c: CancellationException) { throw c } catch (_: Exception) { _notice.value = "Bearbeiten fehlgeschlagen."; false }
+    fun deleteForEveryone(message: MessageId) { viewModelScope.launch {
+        val ok = try { messenger?.deleteForEveryone(message) == true } catch (c: CancellationException) { throw c } catch (_: Exception) { false }
+        if (!ok) _notice.value = "Löschen für alle nicht mehr möglich."
+    } }
     fun attachmentKind(attachment: AttachmentId): AttachmentKind? = try { messenger?.attachmentKind(attachment) } catch (_: Exception) { null }
     suspend fun loadAttachment(message: MessageId, attachment: AttachmentId): LoadedAttachment? = try { messenger?.loadAttachment(message, attachment) }
         catch (c: CancellationException) { throw c }

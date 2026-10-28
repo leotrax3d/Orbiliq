@@ -34,6 +34,11 @@ interface UnifiedCommunication {
     suspend fun react(message: MessageId, emoji: String): Boolean = false
     /** Image bytes for display only (never persisted by Orbiliq); null when unavailable. */
     suspend fun loadImage(message: MessageId, attachment: AttachmentId): ByteArray? = null
+    /** Own message the provider currently allows to edit (provider-specific time/ownership rules). */
+    suspend fun canEdit(message: MessageId): Boolean = false
+    suspend fun edit(message: MessageId, text: String): Boolean = false
+    suspend fun canDeleteForEveryone(message: MessageId): Boolean = false
+    suspend fun deleteForEveryone(message: MessageId): Boolean = false
     /** Provider-declared kind of an attachment id, or null when unknown. */
     fun attachmentKind(attachment: AttachmentId): AttachmentKind? = null
     /** Bytes for in-memory playback or an explicit user save; never persisted by Orbiliq. */

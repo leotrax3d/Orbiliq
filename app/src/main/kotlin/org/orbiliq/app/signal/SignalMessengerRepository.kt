@@ -104,6 +104,14 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
         if ((stored.content as? MessageContent.Media)?.attachments?.contains(attachment) != true) return@withContext null
         session?.image(ref, attachment)
     }
+    private suspend fun owned(message: MessageId): Boolean {
+        val active = account.value ?: return false
+        return ready.await().snapshot().messages.any { it.id == message && it.route.accountId == active }
+    }
+    override suspend fun canEdit(message: MessageId) = withContext(Dispatchers.IO) { owned(message) && communication().canEdit(message) }
+    override suspend fun edit(message: MessageId, text: String) = withContext(Dispatchers.IO) { owned(message) && communication().edit(message, text) }
+    override suspend fun canDeleteForEveryone(message: MessageId) = withContext(Dispatchers.IO) { owned(message) && communication().canDeleteForEveryone(message) }
+    override suspend fun deleteForEveryone(message: MessageId) = withContext(Dispatchers.IO) { owned(message) && communication().deleteForEveryone(message) }
     override fun attachmentKind(attachment: AttachmentId) = SignalMessagingSession.kindOf(attachment)
     override suspend fun loadAttachment(message: MessageId, attachment: AttachmentId) = withContext(Dispatchers.IO) {
         val active = account.value ?: return@withContext null

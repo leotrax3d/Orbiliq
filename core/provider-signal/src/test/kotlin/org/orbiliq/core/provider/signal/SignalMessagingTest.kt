@@ -31,10 +31,14 @@ class SignalMessagingTest {
         override suspend fun lookup(binding: SignalBinding, thread: Long, ids: List<Long>) = ids.mapNotNull { rows[it]?.takeIf { row -> row.thread == thread } }
         var lastReplyTo: Long? = null
         var lastImage: String? = null
+        var lastEdit: Long? = null
+        override suspend fun deleteForEveryone(binding: SignalBinding, thread: Long, message: Long): SignalSendResult {
+            rows.remove(message); return SignalSendResult.Queued(message)
+        }
         val staged = mutableMapOf<String, Int>()
         override suspend fun stageImage(binding: SignalBinding, token: String, jpeg: ByteArray): Boolean { staged[token] = jpeg.size; return true }
-        override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long?, image: String?): SignalSendResult {
-            sendCalls++; lastReplyTo = replyTo; lastImage = image
+        override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long?, image: String?, edit: Long?): SignalSendResult {
+            sendCalls++; lastReplyTo = replyTo; lastImage = image; lastEdit = edit
             return if (unknown) SignalSendResult.Unknown else SignalSendResult.Queued(22)
         }
         var imageCalls = 0
@@ -301,6 +305,27 @@ class SignalMessagingTest {
             assertEquals("application/pdf", peer.stagedFiles.values.single())
             assertTrue(session.execute(command(session, CommandPayload.SendMedia(staged, AttachmentKind.File))) is DispatchResult.Accepted)
             assertTrue(session.execute(command(session, CommandPayload.SendMedia(staged, AttachmentKind.Image))) is DispatchResult.Rejected)
+        }
+    }
+    @Test fun editAndDeleteFollowTheCompanionsPerMessageRules() = runBlocking {
+        val peer = Peer(binding).apply {
+            rows[11] = SignalText(11, 7, "self", "mine", true, 1, 1, "Sent", canEdit = true, canDelete = true)
+            rows[12] = SignalText(12, 7, "9", "theirs", false, 1, 1, "Sent")
+        }
+        running(peer) { session, _ ->
+            val mine = MessageRef(scope(session).ref, "11")
+            val theirs = MessageRef(scope(session).ref, "12")
+            fun at(ref: MessageRef) = CapabilityScope.Message(ProviderId("signal"), ref)
+            assertTrue(session.evaluate(OperationRequest(at(mine), Operations.EditText, textLength = 3, sizeBytes = 3)) is Availability.Available)
+            assertTrue(session.evaluate(OperationRequest(at(theirs), Operations.EditText, textLength = 3, sizeBytes = 3)) !is Availability.Available)
+            assertTrue(session.evaluate(OperationRequest(at(theirs), Operations.DeleteAll)) !is Availability.Available)
+            assertTrue(session.execute(command(session, CommandPayload.EditText(theirs, "new", null))) is DispatchResult.Rejected)
+            assertTrue(session.execute(command(session, CommandPayload.EditText(mine, "new", null))) is DispatchResult.Accepted)
+            assertEquals(11L, peer.lastEdit)
+            assertTrue(session.execute(command(session, CommandPayload.Delete(mine, forEveryone = false))) is DispatchResult.Rejected)
+            val deleting = command(session, CommandPayload.Delete(mine, forEveryone = true))
+            val accepted = session.execute(deleting) as DispatchResult.Accepted
+            assertTrue(session.reconcile(ReconcileRequest(deleting.id, deleting.route, accepted.receipt)) is ReconcileResult.Confirmed)
         }
     }
     @Test fun imageContractRejectsUnsupportedTypesAndOversize() {

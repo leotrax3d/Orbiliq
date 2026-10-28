@@ -148,6 +148,7 @@ internal class BridgeMessaging(private val context: Context) {
       "messageReact" -> react(extras)
       "messageImage" -> image(extras)
       "messageStageImage" -> stage(binding, extras)
+      "messageDelete" -> remoteDelete(extras)
       else -> error("Unsupported bridge operation")
     }.apply { putInt("messageProtocolVersion", SignalMessagingContract.VERSION) }
   }
@@ -198,6 +199,20 @@ internal class BridgeMessaging(private val context: Context) {
     state.put("staged:$token", JSONObject().put("uri", uri.toString()).put("size", clean.size.toLong()).put("width", width).put("height", height))
     ledger.write(state)
     return Bundle().apply { putString("result", "Staged") }
+  }
+  /** Delete for everyone with Signal's own time/ownership rules; repeating an applied delete is a no-op. */
+  private fun remoteDelete(extras: Bundle): Bundle {
+    val thread = extras.getLong("thread")
+    val id = extras.getLong("message")
+    require(thread > 0 && id > 0)
+    val message = SignalDatabase.messages.getMessageRecordOrNull(id)
+    if (message?.isRemoteDelete == true && message.threadId == thread) return Bundle().apply { putString("result", "Queued"); putLong("messageId", id) }
+    val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)
+    if (message == null || recipient == null || message.threadId != thread || !exportable(message) || !canSendNormal(recipient, thread) ||
+        !org.thoughtcrime.securesms.util.MessageConstraintsUtil.isValidRemoteDeleteSend(message, System.currentTimeMillis()))
+      return Bundle().apply { putString("result", "Rejected") }
+    MessageSender.sendRemoteDelete(id)
+    return Bundle().apply { putString("result", "Queued"); putLong("messageId", id) }
   }
   private fun shareableFile(attachment: DatabaseAttachment): Boolean =
     attachment.contentType?.let { it.length in 3..128 && '/' in it } == true && attachment.stickerLocator == null &&
@@ -269,6 +284,11 @@ internal class BridgeMessaging(private val context: Context) {
       putString("text", if (supported) message.body else ""); putBoolean("supported", supported); putBoolean("outgoing", message.isOutgoing)
       putLong("timestamp", message.dateSent); putLong("received", message.dateReceived)
       quoted(message)?.let { putLong("replyTo", it) }
+      val writable = SignalDatabase.threads.getRecipientForThreadId(message.threadId)?.let { canSendNormal(it, message.threadId) } == true
+      val now = System.currentTimeMillis()
+      putBoolean("canEdit", writable && supported && message.body.isNotEmpty() &&
+        org.thoughtcrime.securesms.util.MessageConstraintsUtil.isValidEditMessageSend(message, now))
+      putBoolean("canDelete", writable && org.thoughtcrime.securesms.util.MessageConstraintsUtil.isValidRemoteDeleteSend(message, now))
       if (supported) {
         putLongArray("imageIds", images.map { it.attachmentId.id }.toLongArray())
         putStringArrayList("imageTypes", ArrayList(images.map { requireNotNull(it.contentType) }))
@@ -317,8 +337,11 @@ internal class BridgeMessaging(private val context: Context) {
     val replyTo = extras.getLong("replyTo", 0L)
     require(replyTo >= 0)
     val imageToken = extras.getString("image")
+    val edit = extras.getLong("edit", 0L)
+    require(edit >= 0)
     if (entry != null) {
-      check(entry.getLong("thread") == thread && entry.optLong("replyTo", 0L) == replyTo && entry.optString("image", "") == (imageToken ?: ""))
+      check(entry.getLong("thread") == thread && entry.optLong("replyTo", 0L) == replyTo && entry.optString("image", "") == (imageToken ?: "") &&
+        entry.optLong("edit", 0L) == edit)
       if (method == "messageSend") check(entry.getString("bodyHash") == hash(requireNotNull(extras.getString("text"))))
       return find(entry)
     }
@@ -330,6 +353,12 @@ internal class BridgeMessaging(private val context: Context) {
     val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)
     if (recipient == null || (!recipient.isIndividual && !recipient.isSelf && !recipient.isGroup) || !canSendNormal(recipient, thread))
       return Bundle().apply { putString("result", "Rejected") }
+    if (edit != 0L) {
+      val target = SignalDatabase.messages.getMessageRecordOrNull(edit)
+      if (target == null || target.threadId != thread || !exportable(target) || target.body.isEmpty() || imageToken != null || replyTo != 0L ||
+          !org.thoughtcrime.securesms.util.MessageConstraintsUtil.isValidEditMessageSend(target, System.currentTimeMillis()))
+        return Bundle().apply { putString("result", "Rejected") }
+    }
     // Quote only an exportable, normal text message of this very thread; never media/ephemeral originals.
     val quote = if (replyTo == 0L) null else {
       val original = SignalDatabase.messages.getMessageRecordOrNull(replyTo)
@@ -343,9 +372,10 @@ internal class BridgeMessaging(private val context: Context) {
     val timestamp = maxOf(System.currentTimeMillis(), state.optLong("lastTimestamp", 0L) + 1)
     entry = JSONObject().put("thread", thread).put("timestamp", timestamp).put("bodyHash", hash(text)).put("replyTo", replyTo)
     imageToken?.let { entry.put("image", it) }
+    if (edit != 0L) entry.put("edit", edit)
     state.put(key, entry).put("lastTimestamp", timestamp)
     ledger.write(state) // Durable claim BEFORE any potentially effective send; never auto-resend a claim.
-    MessageSender.send(context, OutgoingMessage(threadRecipient = recipient, sentTimeMillis = timestamp, body = text, isSecure = true, outgoingQuote = quote,
+    MessageSender.send(context, OutgoingMessage(threadRecipient = recipient, sentTimeMillis = timestamp, body = text, isSecure = true, outgoingQuote = quote, messageToEdit = edit,
       attachments = staged?.let {
         val uri = android.net.Uri.parse(it.getString("uri"))
         listOf(if (it.has("type")) DocumentSlide(context, uri, it.getString("type"), it.getLong("size"), it.getString("name")).asAttachment()

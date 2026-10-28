@@ -119,4 +119,29 @@ class SignalMessagingIntegrationTest {
         val bytes = repository.loadImage(sent.id, (sent.content as MessageContent.Media).attachments.single())
         assertTrue("Sent image not readable", bytes != null && android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) != null)
     }
+
+    /** Opt-in, own "Notiz an mich" only: a synthetic text document is sent unchanged and read back from the companion. */
+    @Test fun selfDocumentRoundTripKeepsBytes() = runBlocking {
+        assumeTrue("Explicit self-send opt-in required", args.getString("signalSelfSend") == "true")
+        val repository = EntryPointAccessors.fromApplication(context, ConversationRepositoryEntryPoint::class.java).conversations() as MessengerRepository
+        val snapshot = withTimeout(60_000) { repository.observeMessenger().first { s ->
+            s.accounts.any { account -> account.ownIdentityId != null && s.entries.any { it.route.conversation.participants == setOf(account.ownIdentityId) } }
+        } }
+        val own = snapshot.accounts.single().ownIdentityId!!
+        val route = snapshot.entries.single { it.route.conversation.participants == setOf(own) }.route
+        val target = ConversationTarget.ProviderChat(route.conversation.ref)
+        withTimeout(60_000) { while (!repository.canSendFile(route)) kotlinx.coroutines.delay(200) }
+        val content = "Orbiliq Dokumenttest ${UUID.randomUUID()}".toByteArray()
+        val caption = "Dateitest ${UUID.randomUUID()}"
+        val result = repository.sendFile(target, route, content, "text/plain", "orbiliq-test.txt", caption)
+        assertTrue("File not queued: " + result::class.simpleName, result is SendTextResult.Queued)
+        val sent = withTimeout(120_000) { repository.observeTimeline(target).first { t ->
+            t.messages.any { (it.content as? MessageContent.Media)?.caption == caption && it.ref != null &&
+                (it.content as MessageContent.Media).attachments.single().value.contains(":file:") }
+        } }.messages.single { (it.content as? MessageContent.Media)?.caption == caption }
+        val id = (sent.content as MessageContent.Media).attachments.single()
+        assertTrue(repository.attachmentKind(id) == AttachmentKind.File)
+        val loaded = repository.loadAttachment(sent.id, id)
+        assertTrue("Document bytes differ", loaded != null && loaded.bytes.contentEquals(content))
+    }
 }
