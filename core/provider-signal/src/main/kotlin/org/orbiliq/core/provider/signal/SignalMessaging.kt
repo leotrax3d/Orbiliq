@@ -13,6 +13,9 @@ object SignalMessagingContract {
     const val MAX_IMAGE_BYTES = 16L * 1024 * 1024
     val IMAGE_TYPES = setOf("image/jpeg", "image/png", "image/webp", "image/gif")
     const val STAGE_CHUNK_BYTES = 256 * 1024
+    /** Larger attachments stay in the companion; in-memory handling is bounded by this. */
+    const val MAX_FILE_BYTES = 64L * 1024 * 1024
+    val FILE_KINDS = setOf("voice", "audio", "video", "file")
     const val MAX_IMAGE_EDGE = 4096
 }
 
@@ -33,11 +36,13 @@ class SignalText(
     val replyTo: Long? = null,
     val reactions: List<SignalReaction> = emptyList(),
     val images: List<SignalImage> = emptyList(),
+    val files: List<SignalFile> = emptyList(),
 ) {
     init {
         require(id > 0 && thread > 0 && timestamp > 0 && received > 0)
-        require(if (supported) (text.isNotEmpty() || images.isNotEmpty()) && text.length <= SignalMessagingContract.MAX_TEXT else text.isEmpty() && images.isEmpty())
-        require(images.size <= SignalMessagingContract.MAX_IMAGES && images.map { it.id }.distinct().size == images.size)
+        require(if (supported) (text.isNotEmpty() || images.isNotEmpty() || files.isNotEmpty()) && text.length <= SignalMessagingContract.MAX_TEXT
+            else text.isEmpty() && images.isEmpty() && files.isEmpty())
+        require(images.size + files.size <= SignalMessagingContract.MAX_IMAGES && (images.map { it.id } + files.map { it.id }).distinct().size == images.size + files.size)
         require(!supported || text.toByteArray(Charsets.UTF_8).size <= SignalMessagingContract.MAX_TEXT_BYTES)
         require(sender == "self" || sender.matches(Regex("[0-9]+|service:[0-9a-f]{64}")))
         require(senderName.length <= 512)
@@ -51,6 +56,10 @@ class SignalText(
 class SignalImage(val id: Long, val mimeType: String, val sizeBytes: Long) {
     init { require(id > 0 && mimeType in SignalMessagingContract.IMAGE_TYPES && sizeBytes in 1..SignalMessagingContract.MAX_IMAGE_BYTES) }
     override fun toString() = "SignalImage(redacted)"
+}
+class SignalFile(val id: Long, val mimeType: String, val sizeBytes: Long, val kind: String) {
+    init { require(id > 0 && mimeType.length in 3..128 && '/' in mimeType && sizeBytes in 1..SignalMessagingContract.MAX_FILE_BYTES && kind in SignalMessagingContract.FILE_KINDS) }
+    override fun toString() = "SignalFile(redacted)"
 }
 /** Signal permits one reaction per actor and message. */
 class SignalReaction(val actor: String, val emoji: String) {
@@ -78,7 +87,11 @@ interface SignalMessagingTransport {
     /** Sets the own reaction (idempotent: an identical existing reaction is not resent). */
     suspend fun react(binding: SignalBinding, thread: Long, message: Long, emoji: String): SignalSendResult = SignalSendResult.Rejected
     /** Decrypted image bytes of one exportable message, bounded by [SignalMessagingContract.MAX_IMAGE_BYTES]. */
-    suspend fun image(binding: SignalBinding, thread: Long, message: Long, attachment: Long): ByteArray? = null
+    suspend fun image(binding: SignalBinding, thread: Long, message: Long, attachment: Long): ByteArray? = attachment(binding, thread, message, attachment)?.second
+    /** MIME type and decrypted bytes of one exported attachment, bounded by [SignalMessagingContract.MAX_FILE_BYTES]. */
+    suspend fun attachment(binding: SignalBinding, thread: Long, message: Long, attachment: Long): Pair<String, ByteArray>? = null
+    /** Stages a non-image, non-video file unchanged (the user picked it as a document). */
+    suspend fun stageFile(binding: SignalBinding, token: String, bytes: ByteArray, mimeType: String, name: String?): Boolean = false
     /** Hands a JPEG to the companion's encrypted store; true once fully staged under [token]. */
     suspend fun stageImage(binding: SignalBinding, token: String, jpeg: ByteArray): Boolean = false
 }

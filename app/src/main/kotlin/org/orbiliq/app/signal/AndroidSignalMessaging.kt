@@ -70,9 +70,20 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
         require(ids.size == types.size && ids.size == sizes.size)
         return ids.indices.map { SignalImage(ids[it], types[it], sizes[it]) }
     }
+    private fun files(row: Bundle): List<SignalFile> {
+        val ids = row.getLongArray("fileIds") ?: return emptyList()
+        val types = requireNotNull(row.getStringArrayList("fileTypes"))
+        val sizes = requireNotNull(row.getLongArray("fileSizes"))
+        val kinds = requireNotNull(row.getStringArrayList("fileKinds"))
+        require(ids.size == types.size && ids.size == sizes.size && ids.size == kinds.size)
+        return ids.indices.map { SignalFile(ids[it], types[it], sizes[it], kinds[it]) }
+    }
+    override suspend fun stageFile(binding: SignalBinding, token: String, bytes: ByteArray, mimeType: String, name: String?): Boolean =
+        stage(binding, token, bytes) { putString("fileType", mimeType); name?.let { putString("fileName", it) } }
     @Suppress("DEPRECATION")
-    override suspend fun image(binding: SignalBinding, thread: Long, message: Long, attachment: Long): ByteArray? = withContext(Dispatchers.IO) {
+    override suspend fun attachment(binding: SignalBinding, thread: Long, message: Long, attachment: Long): Pair<String, ByteArray>? = withContext(Dispatchers.IO) {
         val result = call("messageImage", binding, Bundle().apply { putLong("thread", thread); putLong("message", message); putLong("attachment", attachment) })
+        val mime = requireNotNull(result.getString("mimeType"))
         val stream = requireNotNull(result.getParcelable<android.os.ParcelFileDescriptor>("stream"))
         android.os.ParcelFileDescriptor.AutoCloseInputStream(stream).use { input ->
             val out = java.io.ByteArrayOutputStream()
@@ -81,9 +92,9 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
                 val read = input.read(buffer)
                 if (read < 0) break
                 out.write(buffer, 0, read)
-                check(out.size() <= SignalMessagingContract.MAX_IMAGE_BYTES)
+                check(out.size() <= SignalMessagingContract.MAX_FILE_BYTES)
             }
-            out.toByteArray().takeIf { it.isNotEmpty() }
+            out.toByteArray().takeIf { it.isNotEmpty() }?.let { mime to it }
         }
     }
     private fun reactions(row: Bundle): List<SignalReaction> {
@@ -95,7 +106,7 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
     private fun decode(bundle: Bundle): List<SignalText> = rows(bundle).also { require(it.size <= SignalMessagingContract.PAGE_SIZE) }.map {
         SignalText(it.getLong("id"), it.getLong("thread"), requireNotNull(it.getString("sender")), requireNotNull(it.getString("text")),
             it.getBoolean("outgoing"), it.getLong("timestamp"), it.getLong("received"), requireNotNull(it.getString("delivery")), it.getBoolean("supported", true), it.getString("senderName").orEmpty(),
-            it.getLong("replyTo").takeIf { id -> id > 0 }, reactions(it), images(it))
+            it.getLong("replyTo").takeIf { id -> id > 0 }, reactions(it), images(it), files(it))
     }
     override suspend fun texts(binding: SignalBinding, thread: Long, beforeId: Long): SignalTextPage {
         val result = call("messageTexts", binding, Bundle().apply { putLong("thread", thread); putLong("beforeId", beforeId) })
@@ -110,17 +121,18 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
     }
     override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long?, image: String?): SignalSendResult = result(call("messageSend", binding,
         Bundle().apply { putString("commandId", commandId); putLong("thread", thread); putString("text", text); replyTo?.let { putLong("replyTo", it) }; image?.let { putString("image", it) } }))
-    override suspend fun stageImage(binding: SignalBinding, token: String, jpeg: ByteArray): Boolean {
-        require(jpeg.isNotEmpty() && jpeg.size <= SignalMessagingContract.MAX_IMAGE_BYTES)
+    override suspend fun stageImage(binding: SignalBinding, token: String, jpeg: ByteArray): Boolean = stage(binding, token, jpeg) {}
+    private suspend fun stage(binding: SignalBinding, token: String, bytes: ByteArray, extra: Bundle.() -> Unit): Boolean {
+        require(bytes.isNotEmpty() && bytes.size <= SignalMessagingContract.MAX_FILE_BYTES)
         var offset = 0
-        while (offset < jpeg.size) {
-            val end = minOf(jpeg.size, offset + SignalMessagingContract.STAGE_CHUNK_BYTES)
+        while (offset < bytes.size) {
+            val end = minOf(bytes.size, offset + SignalMessagingContract.STAGE_CHUNK_BYTES)
             val result = call("messageStageImage", binding, Bundle().apply {
-                putString("token", token); putLong("total", jpeg.size.toLong()); putLong("offset", offset.toLong())
-                putByteArray("chunk", jpeg.copyOfRange(offset, end))
+                putString("token", token); putLong("total", bytes.size.toLong()); putLong("offset", offset.toLong())
+                putByteArray("chunk", bytes.copyOfRange(offset, end)); extra()
             }).getString("result")
             offset = end
-            if (offset == jpeg.size) return result == "Staged"
+            if (offset == bytes.size) return result == "Staged"
             check(result == "Partial")
         }
         return false

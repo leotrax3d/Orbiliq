@@ -278,7 +278,7 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             if (!outgoing && route.conversation.kind == ConversationKind.Group) Text(snapshot.identities.find { it.ref == message.sender }?.displayName ?: "Teilnehmer", style = MaterialTheme.typography.labelMedium)
                             message.replyTo?.let { id -> Text("↳ ${timeline.messages.find { it.id == id }?.let { messageText(it).take(80) } ?: "Ursprüngliche Nachricht nicht geladen"}", style = MaterialTheme.typography.labelMedium) }
-                            (message.content as? MessageContent.Media)?.let { media -> media.attachments.forEach { id -> ImageAttachment(model, message.id, id) } }
+                            (message.content as? MessageContent.Media)?.let { media -> media.attachments.forEach { id -> AttachmentView(model, message.id, id) } }
                             if (message.content !is MessageContent.Media || (message.content as MessageContent.Media).caption != null)
                                 Text(messageText(message), style = MaterialTheme.typography.bodyLarge)
                             timeline.reactions[message.id]?.takeIf { it.isNotEmpty() }?.let { counts ->
@@ -324,6 +324,16 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
             }
         }
         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+            val canFile by produceState(false, route, snapshot.syncNotice) { value = model.canSendFile(route) }
+            val filePicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null) scope.launch {
+                    sending = true
+                    try { if (model.sendFile(route, uri, context.contentResolver, draft)) draft = "" }
+                    finally { sending = false }
+                }
+            }
+            if (canFile) TextButton(onClick = { filePicker.launch(arrayOf("*/*")) }, enabled = !sending,
+                modifier = Modifier.padding(bottom = 24.dp).heightIn(min = 48.dp).semantics { contentDescription = "Datei senden" }) { Text("Datei") }
             if (canImage) TextButton(onClick = {
                 picker.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
             }, enabled = !sending, modifier = Modifier.padding(bottom = 24.dp).heightIn(min = 48.dp).semantics { contentDescription = "Bild ohne Metadaten senden" }) { Text("Bild") }
@@ -446,4 +456,102 @@ private fun ImageAttachment(model: InboxViewModel, message: MessageId, attachmen
         requested -> Text("Bild wird geladen \u2026", style = MaterialTheme.typography.labelMedium)
         else -> TextButton(onClick = { requested = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Bild laden") }
     }
+}
+
+@Composable
+private fun AttachmentView(model: InboxViewModel, message: MessageId, attachment: AttachmentId) {
+    when (model.attachmentKind(attachment)) {
+        AttachmentKind.Image -> ImageAttachment(model, message, attachment)
+        AttachmentKind.Audio, AttachmentKind.VoiceNote -> AudioAttachment(model, message, attachment)
+        AttachmentKind.Video -> VideoAttachment(model, message, attachment)
+        else -> FileAttachment(model, message, attachment)
+    }
+}
+
+/** Plays from memory via MediaDataSource; no decrypted copy is written to disk. */
+private class MemoryMedia(private val bytes: ByteArray) : android.media.MediaDataSource() {
+    override fun getSize() = bytes.size.toLong()
+    override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+        if (position >= bytes.size) return -1
+        val n = minOf(size.toLong(), bytes.size - position).toInt()
+        System.arraycopy(bytes, position.toInt(), buffer, offset, n)
+        return n
+    }
+    override fun close() {}
+}
+
+@Composable
+private fun AudioAttachment(model: InboxViewModel, message: MessageId, attachment: AttachmentId) {
+    val scope = rememberCoroutineScope()
+    var player by remember(attachment) { mutableStateOf<android.media.MediaPlayer?>(null) }
+    var busy by remember(attachment) { mutableStateOf(false) }
+    DisposableEffect(attachment) { onDispose { player?.release(); player = null } }
+    val voice = model.attachmentKind(attachment) == AttachmentKind.VoiceNote
+    TextButton(onClick = {
+        player?.let { it.release(); player = null; return@TextButton }
+        scope.launch {
+            busy = true
+            val loaded = model.loadAttachment(message, attachment)
+            busy = false
+            if (loaded != null) player = android.media.MediaPlayer().apply {
+                setDataSource(MemoryMedia(loaded.bytes))
+                setOnCompletionListener { it.release(); player = null }
+                prepare(); start()
+            }
+        }
+    }, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) {
+        Text(when { busy -> "Lädt …"; player != null -> "Stoppen"; voice -> "Sprachnachricht abspielen"; else -> "Audio abspielen" })
+    }
+}
+
+@Composable
+private fun VideoAttachment(model: InboxViewModel, message: MessageId, attachment: AttachmentId) {
+    val scope = rememberCoroutineScope()
+    var loaded by remember(attachment) { mutableStateOf<LoadedAttachment?>(null) }
+    var busy by remember(attachment) { mutableStateOf(false) }
+    TextButton(onClick = { scope.launch { busy = true; loaded = model.loadAttachment(message, attachment); busy = false } },
+        enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) { Text(if (busy) "Lädt …" else "Video abspielen") }
+    loaded?.let { video ->
+        androidx.compose.ui.window.Dialog(onDismissRequest = { loaded = null }) {
+            val player = remember(video) { android.media.MediaPlayer().apply { setDataSource(MemoryMedia(video.bytes)); setOnPreparedListener { it.start() } } }
+            DisposableEffect(video) { onDispose { player.release() } }
+            androidx.compose.ui.viewinterop.AndroidView(factory = { context ->
+                android.view.SurfaceView(context).apply {
+                    holder.addCallback(object : android.view.SurfaceHolder.Callback {
+                        override fun surfaceCreated(holder: android.view.SurfaceHolder) { player.setDisplay(holder); player.prepareAsync() }
+                        override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {}
+                        override fun surfaceDestroyed(holder: android.view.SurfaceHolder) { player.setDisplay(null) }
+                    })
+                }
+            }, modifier = Modifier.fillMaxWidth().aspectRatio(9f / 16f).semantics { contentDescription = "Video" })
+        }
+    }
+}
+
+/** Saves only after the user picks a destination; Orbiliq keeps no copy. */
+@Composable
+private fun FileAttachment(model: InboxViewModel, message: MessageId, attachment: AttachmentId) {
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var pending by remember(attachment) { mutableStateOf<LoadedAttachment?>(null) }
+    var busy by remember(attachment) { mutableStateOf(false) }
+    val saver = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("*/*")) { uri ->
+        val data = pending
+        pending = null
+        if (uri != null && data != null) scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            context.contentResolver.openOutputStream(uri)?.use { it.write(data.bytes) }
+        }
+    }
+    TextButton(onClick = {
+        scope.launch {
+            busy = true
+            val loaded = model.loadAttachment(message, attachment)
+            busy = false
+            if (loaded != null) {
+                pending = loaded
+                val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(loaded.mimeType)
+                saver.launch("signal-datei" + (extension?.let { ".$it" } ?: ""))
+            }
+        }
+    }, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) { Text(if (busy) "Lädt …" else "Datei speichern") }
 }

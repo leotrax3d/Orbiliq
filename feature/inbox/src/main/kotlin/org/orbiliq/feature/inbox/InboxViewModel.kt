@@ -47,6 +47,35 @@ class InboxViewModel(repository: ConversationRepository) : ViewModel() {
         }
     } catch (c: CancellationException) { throw c }
       catch (_: Exception) { _notice.value = "Nachricht konnte nicht gespeichert werden. Bitte erneut versuchen."; false }
+    fun attachmentKind(attachment: AttachmentId): AttachmentKind? = try { messenger?.attachmentKind(attachment) } catch (_: Exception) { null }
+    suspend fun loadAttachment(message: MessageId, attachment: AttachmentId): LoadedAttachment? = try { messenger?.loadAttachment(message, attachment) }
+        catch (c: CancellationException) { throw c }
+        catch (_: Exception) { null }
+    suspend fun canSendFile(route: SendRoute): Boolean = try { messenger?.canSendFile(route) == true }
+        catch (c: CancellationException) { throw c }
+        catch (_: Exception) { false }
+    suspend fun sendFile(route: SendRoute, uri: android.net.Uri, resolver: android.content.ContentResolver, caption: String?): Boolean = try {
+        val mime = resolver.getType(uri) ?: "application/octet-stream"
+        val name = resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            resolver.openInputStream(uri)?.use { input ->
+                val out = java.io.ByteArrayOutputStream(); val buffer = ByteArray(64 * 1024)
+                while (true) { val n = input.read(buffer); if (n < 0) break; out.write(buffer, 0, n); if (out.size() > 64 * 1024 * 1024) return@use null }
+                out.toByteArray()
+            }
+        }
+        when {
+            mime.startsWith("image/") || mime.startsWith("video/") -> { _notice.value = "Bilder bitte über „Bild“ senden; Videoversand ist nicht verfügbar."; false }
+            bytes == null || bytes.isEmpty() -> { _notice.value = "Datei ist leer oder größer als 64 MB."; false }
+            else -> when (messenger?.sendFile(ConversationTarget.ProviderChat(route.conversation.ref), route, bytes, mime, name, caption?.trim()?.ifEmpty { null })) {
+                is SendTextResult.Queued -> true
+                else -> { _notice.value = "Dateiversand nicht verfügbar."; false }
+            }
+        }
+    } catch (c: CancellationException) { throw c }
+      catch (_: Exception) { _notice.value = "Datei konnte nicht gesendet werden."; false }
     suspend fun canSendImage(route: SendRoute): Boolean = try { messenger?.canSendImage(route) == true }
         catch (c: CancellationException) { throw c }
         catch (_: Exception) { false }

@@ -71,19 +71,23 @@ class UnifiedCommunicationService(
         return true
     }
 
-    suspend fun imageAvailability(route: SendRoute, caption: String?): Availability {
+    suspend fun imageAvailability(route: SendRoute, caption: String?): Availability = mediaAvailability(route, caption, AttachmentKind.Image)
+    suspend fun mediaAvailability(route: SendRoute, caption: String?, kind: AttachmentKind): Availability {
         val session = sessionFor(route.conversation.ref.accountId)?.takeIf { it.accountId == route.conversation.ref.accountId } ?: return Availability.Unknown
         val text = caption.orEmpty()
-        return session.evaluate(OperationRequest(CapabilityScope.Conversation(route.providerId, route.conversation.ref), Operations.sendMedia(AttachmentKind.Image),
-            textLength = text.length, sizeBytes = text.toByteArray(Charsets.UTF_8).size.toLong(), mimeType = "image/jpeg", targetKind = route.conversation.kind))
+        return session.evaluate(OperationRequest(CapabilityScope.Conversation(route.providerId, route.conversation.ref), Operations.sendMedia(kind),
+            textLength = text.length, sizeBytes = text.toByteArray(Charsets.UTF_8).size.toLong(),
+            mimeType = if (kind == AttachmentKind.Image) "image/jpeg" else null, targetKind = route.conversation.kind))
     }
     /** Enqueues an image already staged by the route's provider under [attachment]. */
-    suspend fun sendStagedImage(target: ConversationTarget, route: SendRoute, attachment: AttachmentId, caption: String?): SendTextResult {
+    suspend fun sendStagedImage(target: ConversationTarget, route: SendRoute, attachment: AttachmentId, caption: String?): SendTextResult =
+        sendStaged(target, route, attachment, AttachmentKind.Image, caption)
+    suspend fun sendStaged(target: ConversationTarget, route: SendRoute, attachment: AttachmentId, kind: AttachmentKind, caption: String?): SendTextResult {
         val s = repository.snapshot()
         val current = communicationRoutes(s, target).find {
             it.providerId == route.providerId && it.conversation.ref == route.conversation.ref
         } ?: return SendTextResult.InvalidRoute
-        val availability = imageAvailability(current, caption)
+        val availability = mediaAvailability(current, caption, kind)
         if (availability !is Availability.Available) return SendTextResult.Unavailable(availability)
         val session = sessionFor(current.conversation.ref.accountId) ?: return SendTextResult.Unavailable(Availability.Unknown)
         val capability = session.observeCapabilities(CapabilityScope.Conversation(current.providerId, current.conversation.ref)).first()
@@ -91,7 +95,7 @@ class UnifiedCommunicationService(
         val sender = s.identities.find { it.id == own }?.ref ?: return SendTextResult.Unavailable(Availability.Unknown)
         val id = CommandId.random()
         val time = now()
-        val command = ProviderCommand(id, current.conversation.ref, CommandPayload.SendMedia(attachment, AttachmentKind.Image, caption?.ifBlank { null }),
+        val command = ProviderCommand(id, current.conversation.ref, CommandPayload.SendMedia(attachment, kind, caption?.ifBlank { null }),
             time, time.plusSeconds(300), capability.revision)
         val optimistic = Message(MessageId(id.value), current.conversation.id, current.conversation.ref, sender,
             MessageContent.Media(listOf(attachment), caption?.ifBlank { null }), MessageDirection.Outgoing, time, security = current.conversation.security)

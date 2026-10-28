@@ -23,6 +23,7 @@ import org.thoughtcrime.securesms.database.model.MessageId
 import org.thoughtcrime.securesms.database.model.MessageRecord
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord
 import org.thoughtcrime.securesms.keyvalue.SignalStore
+import org.thoughtcrime.securesms.mms.DocumentSlide
 import org.thoughtcrime.securesms.mms.ImageSlide
 import org.thoughtcrime.securesms.mms.OutgoingMessage
 import org.thoughtcrime.securesms.mms.QuoteModel
@@ -159,13 +160,28 @@ internal class BridgeMessaging(private val context: Context) {
     require(token.matches(Regex("[0-9a-f]{32}")))
     val total = extras.getLong("total")
     val chunk = requireNotNull(extras.getByteArray("chunk"))
-    require(total in 1..SignalMessagingContract.MAX_IMAGE_BYTES && chunk.size in 1..SignalMessagingContract.STAGE_CHUNK_BYTES)
+    val fileType = extras.getString("fileType")
+    val fileName = extras.getString("fileName")?.take(128)?.replace(Regex("[/\\\\:*?\"<>|\u0000-\u001f]"), "_")
+    require(fileType == null || (fileType.length in 3..128 && '/' in fileType && !fileType.startsWith("image/") && !fileType.startsWith("video/")))
+    require(total in 1..(if (fileType == null) SignalMessagingContract.MAX_IMAGE_BYTES else SignalMessagingContract.MAX_FILE_BYTES) &&
+      chunk.size in 1..SignalMessagingContract.STAGE_CHUNK_BYTES)
     if (staging.size > 4 && token !in staging) staging.clear()
     val buffer = staging.getOrPut(token) { java.io.ByteArrayOutputStream() }
     check(extras.getLong("offset") == buffer.size().toLong() && buffer.size() + chunk.size <= total)
     buffer.write(chunk)
     if (buffer.size().toLong() < total) return Bundle().apply { putString("result", "Partial") }
     val bytes = staging.remove(token)!!.toByteArray()
+    if (fileType != null) {
+      val uri = org.thoughtcrime.securesms.dependencies.AppDependencies.blobs.forData(bytes).withMimeType(fileType)
+        .createForMultipleSessionsOnDisk(context)
+      val ledger = Ledger(context, binding)
+      val state = ledger.read()
+      state.put("staged:$token", JSONObject().put("uri", uri.toString()).put("size", bytes.size.toLong()).put("type", fileType)
+        .put("name", fileName ?: "Datei"))
+      ledger.write(state)
+      bytes.fill(0)
+      return Bundle().apply { putString("result", "Staged") }
+    }
     val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
     android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
     check(bounds.outMimeType == "image/jpeg" && bounds.outWidth in 1..SignalMessagingContract.MAX_IMAGE_EDGE &&
@@ -183,6 +199,15 @@ internal class BridgeMessaging(private val context: Context) {
     ledger.write(state)
     return Bundle().apply { putString("result", "Staged") }
   }
+  private fun shareableFile(attachment: DatabaseAttachment): Boolean =
+    attachment.contentType?.let { it.length in 3..128 && '/' in it } == true && attachment.stickerLocator == null &&
+      attachment.transferState == AttachmentTable.TRANSFER_PROGRESS_DONE && attachment.size in 1..SignalMessagingContract.MAX_FILE_BYTES
+  private fun fileKind(attachment: DatabaseAttachment): String = when {
+    attachment.voiceNote -> "voice"
+    attachment.contentType!!.startsWith("audio/") -> "audio"
+    attachment.contentType!!.startsWith("video/") -> "video"
+    else -> "file"
+  }
   private fun shareableImage(attachment: DatabaseAttachment): Boolean =
     attachment.contentType in SignalMessagingContract.IMAGE_TYPES && attachment.transferState == AttachmentTable.TRANSFER_PROGRESS_DONE &&
       attachment.size in 1..SignalMessagingContract.MAX_IMAGE_BYTES
@@ -195,7 +220,7 @@ internal class BridgeMessaging(private val context: Context) {
     val message = SignalDatabase.messages.getMessageRecordOrNull(id)
     check(message != null && message.threadId == thread && exportable(message))
     val attachment = SignalDatabase.attachments.getAttachmentsForMessage(id).single { !it.quote && it.attachmentId.id == attachmentId }
-    check(shareableImage(attachment))
+    check(shareableImage(attachment) || shareableFile(attachment))
     val pipe = android.os.ParcelFileDescriptor.createPipe()
     Thread {
       try {
@@ -207,7 +232,7 @@ internal class BridgeMessaging(private val context: Context) {
               val read = input.read(buffer)
               if (read < 0) break
               total += read
-              check(total <= SignalMessagingContract.MAX_IMAGE_BYTES)
+              check(total <= SignalMessagingContract.MAX_FILE_BYTES)
               out.write(buffer, 0, read)
             }
           }
@@ -231,11 +256,12 @@ internal class BridgeMessaging(private val context: Context) {
     if (!exportable(message)) return null
     val media = SignalDatabase.attachments.getAttachmentsForMessage(message.id).filter { !it.quote }
     val images = media.filter(::shareableImage)
+    val files = media.filter { it !in images && shareableFile(it) }
     val bodyOk = message.body.length <= SignalMessagingContract.MAX_TEXT &&
       message.body.toByteArray(Charsets.UTF_8).size <= SignalServiceMessageLimits.MAX_INLINE_BODY_SIZE_BYTES
     // Any other attachment (video, voice, file, unfinished download) keeps the whole message native-only.
-    val supported = bodyOk && images.size == media.size && images.size <= SignalMessagingContract.MAX_IMAGES &&
-      (message.body.isNotEmpty() || images.isNotEmpty())
+    val supported = bodyOk && images.size + files.size == media.size && media.size <= SignalMessagingContract.MAX_IMAGES &&
+      (message.body.isNotEmpty() || media.isNotEmpty())
     return Bundle().apply {
       putLong("id", message.id); putLong("thread", message.threadId)
       putString("sender", identity(message.fromRecipient))
@@ -247,6 +273,10 @@ internal class BridgeMessaging(private val context: Context) {
         putLongArray("imageIds", images.map { it.attachmentId.id }.toLongArray())
         putStringArrayList("imageTypes", ArrayList(images.map { requireNotNull(it.contentType) }))
         putLongArray("imageSizes", images.map { it.size }.toLongArray())
+        putLongArray("fileIds", files.map { it.attachmentId.id }.toLongArray())
+        putStringArrayList("fileTypes", ArrayList(files.map { requireNotNull(it.contentType) }))
+        putLongArray("fileSizes", files.map { it.size }.toLongArray())
+        putStringArrayList("fileKinds", ArrayList(files.map(::fileKind)))
       }
       val reactions = SignalDatabase.reactions.getReactions(MessageId(message.id)).take(SignalMessagingContract.MAX_REACTIONS)
       putStringArrayList("reactionEmoji", ArrayList(reactions.map { it.emoji }))
@@ -316,7 +346,11 @@ internal class BridgeMessaging(private val context: Context) {
     state.put(key, entry).put("lastTimestamp", timestamp)
     ledger.write(state) // Durable claim BEFORE any potentially effective send; never auto-resend a claim.
     MessageSender.send(context, OutgoingMessage(threadRecipient = recipient, sentTimeMillis = timestamp, body = text, isSecure = true, outgoingQuote = quote,
-      attachments = staged?.let { listOf(ImageSlide(context, android.net.Uri.parse(it.getString("uri")), it.getLong("size"), it.getInt("width"), it.getInt("height"), null).asAttachment()) }.orEmpty()),
+      attachments = staged?.let {
+        val uri = android.net.Uri.parse(it.getString("uri"))
+        listOf(if (it.has("type")) DocumentSlide(context, uri, it.getString("type"), it.getLong("size"), it.getString("name")).asAttachment()
+          else ImageSlide(context, uri, it.getLong("size"), it.getInt("width"), it.getInt("height"), null).asAttachment())
+      }.orEmpty()),
       thread, MessageSender.SendType.SIGNAL, null, null)
     return find(entry)
   }

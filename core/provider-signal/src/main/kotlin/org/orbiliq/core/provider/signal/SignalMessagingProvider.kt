@@ -14,7 +14,8 @@ import org.orbiliq.core.provider.api.*
 
 class SignalMessagingProviderFactory(private val transport: SignalMessagingTransport) : ProviderFactory {
     override val descriptor = ProviderDescriptor(ProviderId("signal"), "Signal Companion", "0.3-direct-text-quotes",
-        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive), ReplayClass.BestEffort)
+        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive, SignalMessagingSession.FileReceive,
+        Operations.sendMedia(AttachmentKind.File)), ReplayClass.BestEffort)
     override suspend fun open(account: AccountHandle): ProviderSession {
         require(account.account.providerId == descriptor.id)
         val binding = requireNotNull(transport.binding()) { "signal.messaging.consent-required" }
@@ -78,6 +79,18 @@ class SignalMessagingSession(
         val ImageReceive = OperationKey("signal.image.receive")
         fun attachmentId(account: AccountId, image: Long) = AttachmentId("${account.value}:image:$image")
         fun stagedId(account: AccountId, token: String) = AttachmentId("${account.value}:staged:$token")
+        /** Audio, voice notes, video and documents: fetched on demand, played or saved explicitly by the user. */
+        val FileReceive = OperationKey("signal.file.receive")
+        fun fileId(account: AccountId, file: SignalFile) = AttachmentId("${account.value}:file:${file.id}:${file.kind}")
+        fun kindOf(attachment: AttachmentId): AttachmentKind? = when {
+            ":image:" in attachment.value || ":staged:" in attachment.value -> AttachmentKind.Image
+            ":stagedfile:" in attachment.value -> AttachmentKind.File
+            ":file:" in attachment.value -> when (attachment.value.substringAfterLast(":")) {
+                "voice" -> AttachmentKind.VoiceNote; "audio" -> AttachmentKind.Audio; "video" -> AttachmentKind.Video; "file" -> AttachmentKind.File
+                else -> null
+            }
+            else -> null
+        }
         fun accountFor(binding: SignalBinding) = Account(AccountId("signal-${binding.id}"), provider, "Signal", IdentityId("signal-${binding.id}:self"))
         private val security = SecurityContext(Encryption.EndToEnd, Verification.Unknown)
     }
@@ -109,6 +122,11 @@ class SignalMessagingSession(
             Operations.ReceiveText to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             ImageReceive to OperationSupport(Availability.Available(OperationConstraints(maxBytes = SignalMessagingContract.MAX_IMAGE_BYTES,
                 mimeTypes = SignalMessagingContract.IMAGE_TYPES)), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
+            FileReceive to OperationSupport(Availability.Available(OperationConstraints(maxBytes = SignalMessagingContract.MAX_FILE_BYTES)),
+                quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
+            Operations.sendMedia(AttachmentKind.File) to OperationSupport(if (allowed) Availability.Available(OperationConstraints(
+                maxBytes = SignalMessagingContract.MAX_FILE_BYTES, maxTextLength = SignalMessagingContract.MAX_TEXT, persistentOfflineQueue = true))
+                else Availability.Restricted(Restriction.Policy), quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security),
             ReactionReceive to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             QuoteReceive to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             Operations.SendText to sendSupport(allowed),
@@ -200,12 +218,13 @@ class SignalMessagingSession(
                         event(ProviderEvent.IdentityChanged(MessengerIdentity(identityId(sender.remoteIdentityId), sender,
                             senderName)), "sender:${text.sender}", revision(senderName))
                         val message = Message(MessageId("${accountId.value}:message:${text.id}"), conversationId(thread.id), conversation(thread.id), sender,
-                            if (text.supported && text.images.isNotEmpty()) MessageContent.Media(text.images.map { attachmentId(accountId, it.id) }, text.text.ifEmpty { null })
+                            if (text.supported && (text.images.isNotEmpty() || text.files.isNotEmpty()))
+                                MessageContent.Media(text.images.map { attachmentId(accountId, it.id) } + text.files.map { fileId(accountId, it) }, text.text.ifEmpty { null })
                             else if (text.supported) MessageContent.Text(text.text) else MessageContent.Unsupported(MessageType("signal.native-content"), 1, "Diesen Inhalt im Signal Companion öffnen"),
                             if (text.outgoing) MessageDirection.Outgoing else MessageDirection.Incoming,
                             Instant.ofEpochMilli(text.received), Instant.ofEpochMilli(text.timestamp), messageRef(thread.id, text.id),
                             replyTo = text.replyTo?.let { MessageId("${accountId.value}:message:$it") },
-                            providerOrder = text.id.toString().padStart(20, '0'), revision = revision(text.text + text.delivery + text.supported + ":" + text.replyTo + ":" + text.images.joinToString { "${it.id}" }), delivery = DeliveryState.valueOf(text.delivery),
+                            providerOrder = text.id.toString().padStart(20, '0'), revision = revision(text.text + text.delivery + text.supported + ":" + text.replyTo + ":" + text.images.joinToString { "${it.id}" } + text.files.joinToString { "f${it.id}" }), delivery = DeliveryState.valueOf(text.delivery),
                             quality = DataQuality.PartialHistory, security = security, policy = ContentPolicy(cacheAllowed = true))
                         val command = commandMessages[message.ref]
                         revisions.remove("deleted:${text.id}")
@@ -275,11 +294,22 @@ class SignalMessagingSession(
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { null }
     }
+    /** Stages a document unchanged; images and videos must use their dedicated paths. */
+    suspend fun stageFile(bytes: ByteArray, mimeType: String, name: String?): AttachmentId? {
+        if (!job.isActive || bytes.isEmpty() || bytes.size > SignalMessagingContract.MAX_FILE_BYTES ||
+            mimeType.startsWith("image/") || mimeType.startsWith("video/")) return null
+        val token = UUID.randomUUID().toString().replace("-", "")
+        return try {
+            check(transport.binding()?.id == binding.id)
+            if (sendGate.withLock { transport.stageFile(binding, token, bytes, mimeType, name) }) AttachmentId("${accountId.value}:stagedfile:$token") else null
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { null }
+    }
     override suspend fun execute(command: ProviderCommand): DispatchResult = sendGate.withLock {
         (command.payload as? CommandPayload.React)?.let { return react(command, it) }
         (command.payload as? CommandPayload.SendMedia)?.let { media ->
-            val prefix = "${accountId.value}:staged:"
-            val token = media.attachment.value.takeIf { media.kind == AttachmentKind.Image && it.startsWith(prefix) }?.removePrefix(prefix)
+            val prefix = "${accountId.value}:" + if (media.kind == AttachmentKind.File) "stagedfile:" else "staged:"
+            val token = media.attachment.value.takeIf { media.kind in setOf(AttachmentKind.Image, AttachmentKind.File) && it.startsWith(prefix) }?.removePrefix(prefix)
                 ?.takeIf { it.matches(Regex("[0-9a-f]{32}")) } ?: return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
             return dispatch(command, media.caption.orEmpty(), null, token, media.operation)
         }
@@ -296,7 +326,7 @@ class SignalMessagingSession(
             command.capabilityRevision != support(scope).revision || (body.isEmpty() && image == null) ||
             evaluate(OperationRequest(scope, operation, textLength = body.length,
                 sizeBytes = body.toByteArray(Charsets.UTF_8).size.toLong(),
-                mimeType = if (image == null) null else "image/jpeg",
+                mimeType = if (image == null || operation != Operations.sendMedia(AttachmentKind.Image)) null else "image/jpeg",
                 targetKind = if (threadState.value[thread]?.direct == false) ConversationKind.Group else ConversationKind.Direct)) !is Availability.Available ||
             body.toByteArray(Charsets.UTF_8).size > SignalMessagingContract.MAX_TEXT_BYTES)
             return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
@@ -338,15 +368,22 @@ class SignalMessagingSession(
         catch (_: Exception) { ReconcileResult.StillUnknown }
     }
     /** On-demand image bytes for an exported message of this account, or null. */
-    suspend fun image(message: MessageRef, attachment: AttachmentId): ByteArray? {
+    suspend fun image(message: MessageRef, attachment: AttachmentId): ByteArray? =
+        attachment(message, attachment)?.takeIf { attachment.value.startsWith("${accountId.value}:image:") }?.second
+    /** MIME type and bytes of any exported attachment of this account's message, or null. */
+    suspend fun attachment(message: MessageRef, attachment: AttachmentId): Pair<String, ByteArray>? {
         if (!job.isActive || message.conversation.accountId != accountId) return null
-        val prefix = "${accountId.value}:image:"
-        val image = attachment.value.takeIf { it.startsWith(prefix) }?.removePrefix(prefix)?.toLongOrNull() ?: return null
+        val value = attachment.value
+        val image = when {
+            value.startsWith("${accountId.value}:image:") -> value.removePrefix("${accountId.value}:image:").toLongOrNull()
+            value.startsWith("${accountId.value}:file:") -> value.removePrefix("${accountId.value}:file:").substringBefore(":").toLongOrNull()
+            else -> null
+        } ?: return null
         val thread = message.conversation.remoteConversationId.toLongOrNull() ?: return null
         val id = message.remoteMessageId.toLongOrNull() ?: return null
         return try {
             check(transport.binding()?.id == binding.id)
-            sendGate.withLock { transport.image(binding, thread, id, image) }
+            sendGate.withLock { transport.attachment(binding, thread, id, image) }
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { null }
     }

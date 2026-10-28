@@ -38,9 +38,15 @@ class SignalMessagingTest {
             return if (unknown) SignalSendResult.Unknown else SignalSendResult.Queued(22)
         }
         var imageCalls = 0
-        override suspend fun image(binding: SignalBinding, thread: Long, message: Long, attachment: Long): ByteArray? {
+        override suspend fun attachment(binding: SignalBinding, thread: Long, message: Long, attachment: Long): Pair<String, ByteArray>? {
             imageCalls++
-            return if (rows[message]?.images?.any { it.id == attachment } == true) byteArrayOf(1, 2, 3) else null
+            val row = rows[message] ?: return null
+            row.images.find { it.id == attachment }?.let { return it.mimeType to byteArrayOf(1, 2, 3) }
+            return row.files.find { it.id == attachment }?.let { it.mimeType to byteArrayOf(4, 5) }
+        }
+        val stagedFiles = mutableMapOf<String, String>()
+        override suspend fun stageFile(binding: SignalBinding, token: String, bytes: ByteArray, mimeType: String, name: String?): Boolean {
+            stagedFiles[token] = mimeType; return true
         }
         var reactCalls = 0
         override suspend fun react(binding: SignalBinding, thread: Long, message: Long, emoji: String): SignalSendResult {
@@ -75,7 +81,8 @@ class SignalMessagingTest {
     @Test fun textCapabilitiesDoNotPromiseMediaGroupSendingOrHistory() = runBlocking {
         running(Peer(binding)) { session, _ ->
             val caps = session.observeCapabilities(scope(session)).first()
-            assertEquals(setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive), caps.operations.keys)
+            assertEquals(setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive,
+                SignalMessagingSession.FileReceive, Operations.sendMedia(AttachmentKind.File)), caps.operations.keys)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.React)) is Availability.Available)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4001)) is Availability.Restricted)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2, sizeBytes = 2)) is Availability.Available)
@@ -270,6 +277,30 @@ class SignalMessagingTest {
             assertEquals(0, peer.sendCalls)
             assertTrue(session.execute(command(session, CommandPayload.SendMedia(staged, AttachmentKind.Image, "caption"))) is DispatchResult.Accepted)
             assertEquals(token, peer.lastImage)
+        }
+    }
+    @Test fun voiceVideoAndDocumentsAreTypedMediaFetchedOnDemand() = runBlocking {
+        val peer = Peer(binding).apply {
+            rows[11] = SignalText(11, 7, "9", "", false, 1, 1, "Sent", files = listOf(SignalFile(6, "audio/aac", 2, "voice"), SignalFile(8, "application/pdf", 2, "file")))
+        }
+        running(peer) { session, events ->
+            val message = events.mapNotNull { (it.payload as? ProviderEvent.MessageUpserted)?.message }.single()
+            val ids = (message.content as MessageContent.Media).attachments
+            assertEquals(listOf(AttachmentKind.VoiceNote, AttachmentKind.File), ids.map { SignalMessagingSession.kindOf(it) })
+            val loaded = session.attachment(message.ref!!, ids.first())
+            assertEquals("audio/aac", loaded?.first)
+            assertNull(session.image(message.ref!!, ids.first()))
+        }
+    }
+    @Test fun documentsAreStagedUnchangedButImagesAndVideosAreRefusedOnTheFilePath() = runBlocking {
+        val peer = Peer(binding)
+        running(peer) { session, _ ->
+            assertNull(session.stageFile(byteArrayOf(1), "image/png", "x.png"))
+            assertNull(session.stageFile(byteArrayOf(1), "video/mp4", "x.mp4"))
+            val staged = requireNotNull(session.stageFile(byteArrayOf(1, 2), "application/pdf", "x.pdf"))
+            assertEquals("application/pdf", peer.stagedFiles.values.single())
+            assertTrue(session.execute(command(session, CommandPayload.SendMedia(staged, AttachmentKind.File))) is DispatchResult.Accepted)
+            assertTrue(session.execute(command(session, CommandPayload.SendMedia(staged, AttachmentKind.Image))) is DispatchResult.Rejected)
         }
     }
     @Test fun imageContractRejectsUnsupportedTypesAndOversize() {

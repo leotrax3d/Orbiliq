@@ -104,6 +104,26 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
         if ((stored.content as? MessageContent.Media)?.attachments?.contains(attachment) != true) return@withContext null
         session?.image(ref, attachment)
     }
+    override fun attachmentKind(attachment: AttachmentId) = SignalMessagingSession.kindOf(attachment)
+    override suspend fun loadAttachment(message: MessageId, attachment: AttachmentId) = withContext(Dispatchers.IO) {
+        val active = account.value ?: return@withContext null
+        val stored = ready.await().snapshot().messages.find { it.id == message && it.route.accountId == active } ?: return@withContext null
+        val ref = stored.ref ?: return@withContext null
+        if ((stored.content as? MessageContent.Media)?.attachments?.contains(attachment) != true) return@withContext null
+        session?.attachment(ref, attachment)?.let { (mime, bytes) -> LoadedAttachment(mime, bytes) }
+    }
+    override suspend fun canSendFile(route: SendRoute) = withContext(Dispatchers.IO) {
+        route.conversation.ref.accountId == account.value && communication().mediaAvailability(route, null, AttachmentKind.File) is Availability.Available
+    }
+    override suspend fun sendFile(target: ConversationTarget, route: SendRoute, bytes: ByteArray, mimeType: String, name: String?, caption: String?) = withContext(Dispatchers.IO) {
+        check(route.conversation.ref.accountId == account.value)
+        val current = session?.takeIf { it.accountId == route.conversation.ref.accountId }
+            ?: return@withContext SendTextResult.Unavailable(Availability.Unknown)
+        if (communication().mediaAvailability(route, caption, AttachmentKind.File) !is Availability.Available)
+            return@withContext SendTextResult.Unavailable(Availability.Restricted(Restriction.Policy))
+        val staged = current.stageFile(bytes, mimeType, name) ?: return@withContext SendTextResult.Unavailable(Availability.Restricted(Restriction.Policy))
+        communication().sendStaged(target, route, staged, AttachmentKind.File, caption)
+    }
     override suspend fun canSendImage(route: SendRoute) = withContext(Dispatchers.IO) {
         route.conversation.ref.accountId == account.value && communication().imageAvailability(route, null) is Availability.Available
     }
