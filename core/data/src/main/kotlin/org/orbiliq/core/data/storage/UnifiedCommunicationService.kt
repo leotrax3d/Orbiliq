@@ -49,6 +49,28 @@ class UnifiedCommunicationService(
             textLength = text.length, sizeBytes = text.toByteArray(Charsets.UTF_8).size.toLong(), targetKind = route.conversation.kind))
     }
 
+    private suspend fun reactionScope(message: MessageId): Pair<ProviderSession, CapabilityScope.Message>? {
+        val s = repository.snapshot()
+        val ref = s.messages.find { it.id == message }?.ref ?: return null
+        val provider = s.accounts.find { it.id == ref.conversation.accountId }?.providerId ?: return null
+        val session = sessionFor(ref.conversation.accountId)?.takeIf { it.accountId == ref.conversation.accountId } ?: return null
+        return session to CapabilityScope.Message(provider, ref)
+    }
+    override suspend fun canReact(message: MessageId): Boolean {
+        val (session, scope) = reactionScope(message) ?: return false
+        return session.evaluate(OperationRequest(scope, Operations.React)) is Availability.Available
+    }
+    override suspend fun react(message: MessageId, emoji: String): Boolean {
+        require(emoji.isNotBlank() && emoji.length <= 32)
+        val (session, scope) = reactionScope(message) ?: return false
+        if (session.evaluate(OperationRequest(scope, Operations.React)) !is Availability.Available) return false
+        val revision = session.observeCapabilities(scope).first().revision
+        val time = now()
+        repository.enqueue(ProviderCommand(CommandId.random(), scope.ref.conversation, CommandPayload.React(scope.ref, emoji),
+            time, time.plusSeconds(300), revision), null)
+        return true
+    }
+
     override suspend fun sendText(target: ConversationTarget, route: SendRoute, text: String, replyTo: MessageId?): SendTextResult {
         require(text.isNotEmpty())
         val s = repository.snapshot()

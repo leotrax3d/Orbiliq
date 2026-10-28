@@ -47,6 +47,15 @@ class InboxViewModel(repository: ConversationRepository) : ViewModel() {
         }
     } catch (c: CancellationException) { throw c }
       catch (_: Exception) { _notice.value = "Nachricht konnte nicht gespeichert werden. Bitte erneut versuchen."; false }
+    suspend fun canReact(message: MessageId): Boolean = try { messenger?.canReact(message) == true }
+        catch (c: CancellationException) { throw c }
+        catch (_: Exception) { false }
+    fun react(message: MessageId, emoji: String) { viewModelScope.launch {
+        val queued = try { messenger?.react(message, emoji) == true }
+            catch (c: CancellationException) { throw c }
+            catch (_: Exception) { false }
+        if (!queued) _notice.value = "Reaktion nicht verfügbar."
+    } }
     fun archive(id: ConversationId, archived: Boolean) { viewModelScope.launch {
         try { messenger?.archiveConversation(id, archived) }
         catch (c: CancellationException) { throw c }

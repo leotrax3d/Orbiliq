@@ -29,9 +29,18 @@ class SignalMessagingTest {
             return SignalTextPage(page, if (remaining.size > page.size) page.last().id else null)
         }
         override suspend fun lookup(binding: SignalBinding, thread: Long, ids: List<Long>) = ids.mapNotNull { rows[it]?.takeIf { row -> row.thread == thread } }
-        override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String): SignalSendResult {
-            sendCalls++
+        var lastReplyTo: Long? = null
+        override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long?): SignalSendResult {
+            sendCalls++; lastReplyTo = replyTo
             return if (unknown) SignalSendResult.Unknown else SignalSendResult.Queued(22)
+        }
+        var reactCalls = 0
+        override suspend fun react(binding: SignalBinding, thread: Long, message: Long, emoji: String): SignalSendResult {
+            reactCalls++
+            val row = rows.getValue(message)
+            rows[message] = SignalText(row.id, row.thread, row.sender, row.text, row.outgoing, row.timestamp, row.received, row.delivery,
+                reactions = row.reactions.filter { it.actor != "self" } + SignalReaction("self", emoji))
+            return SignalSendResult.Queued(message)
         }
         override suspend fun reconcileText(binding: SignalBinding, commandId: String, thread: Long): SignalSendResult =
             if (unknown) SignalSendResult.Unknown else SignalSendResult.Queued(22)
@@ -55,13 +64,13 @@ class SignalMessagingTest {
     private suspend fun command(session: SignalMessagingSession, payload: CommandPayload = CommandPayload.SendText("hello")) =
         ProviderCommand(CommandId("fixture-command"), scope(session).ref, payload, now, now.plusSeconds(60), session.observeCapabilities(scope(session)).first().revision)
 
-    @Test fun textCapabilitiesDoNotPromiseMediaGroupsHistoryOrReplies() = runBlocking {
+    @Test fun textCapabilitiesDoNotPromiseMediaGroupSendingOrHistory() = runBlocking {
         running(Peer(binding)) { session, _ ->
             val caps = session.observeCapabilities(scope(session)).first()
-            assertEquals(setOf(Operations.SendText, Operations.ReceiveText, SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive), caps.operations.keys)
-            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.React)) is Availability.Unsupported)
+            assertEquals(setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.ReceiveText, SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive), caps.operations.keys)
+            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.React)) is Availability.Available)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4001)) is Availability.Restricted)
-            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2)) is Availability.Unsupported)
+            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2, sizeBytes = 2)) is Availability.Available)
             assertTrue(session.evaluate(OperationRequest(CapabilityScope.Conversation(ProviderId("signal"), ConversationRef(session.accountId, "unknown")), Operations.SendText, textLength = 2)) is Availability.Unsupported)
             assertEquals(ReplayClass.BestEffort, caps.operations.getValue(Operations.ReceiveText).replay)
         }
@@ -150,7 +159,7 @@ class SignalMessagingTest {
             assertTrue(events.mapNotNull { (it.payload as? ProviderEvent.MessageUpserted)?.message }.single().content is MessageContent.Unsupported)
         }
     }
-    @Test fun receivedQuoteReferencesTheOriginalButReplySendingStaysUnsupported() = runBlocking {
+    @Test fun receivedQuoteReferencesTheOriginalAndRepliesPassTheNativeOriginal() = runBlocking {
         val peer = Peer(binding).apply {
             rows[11] = text()
             rows[12] = SignalText(12, 7, "self", "reply fixture", true, now.toEpochMilli(), now.toEpochMilli(), "Sent", replyTo = 11)
@@ -160,9 +169,10 @@ class SignalMessagingTest {
             val original = messages.single { it.ref?.remoteMessageId == "11" }
             assertEquals(original.id, messages.single { it.ref?.remoteMessageId == "12" }.replyTo)
             assertEquals(null, original.replyTo)
-            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2)) is Availability.Unsupported)
-            assertTrue(session.execute(command(session, CommandPayload.SendText("hi", MessageRef(scope(session).ref, "11")))) is DispatchResult.Rejected)
+            assertTrue(session.execute(command(session, CommandPayload.SendText("hi", MessageRef(scope(session).ref, "not-native")))) is DispatchResult.Rejected)
             assertEquals(0, peer.sendCalls)
+            assertTrue(session.execute(command(session, CommandPayload.SendText("hi", MessageRef(scope(session).ref, "11")))) is DispatchResult.Accepted)
+            assertEquals(11L, peer.lastReplyTo)
         }
     }
     private fun reactionEvents(events: List<EventEnvelope>) = events.mapNotNull { it.payload as? ProviderEvent.ReactionChanged }
@@ -189,6 +199,28 @@ class SignalMessagingTest {
     }
     @Test fun reactionContractRejectsDuplicateActors() {
         assertThrows(IllegalArgumentException::class.java) { SignalText(5, 7, "9", "x", false, 1, 1, "Sent", reactions = listOf(SignalReaction("9", "a"), SignalReaction("9", "b"))) }
+    }
+    @Test fun ownReactionIsQueuedNativelyAndConfirmedFromTheNativeState() = runBlocking {
+        val peer = Peer(binding).apply { rows[11] = text() }
+        running(peer) { session, _ ->
+            val ref = MessageRef(scope(session).ref, "11")
+            val messageScope = CapabilityScope.Message(ProviderId("signal"), ref)
+            assertTrue(session.evaluate(OperationRequest(messageScope, Operations.React)) is Availability.Available)
+            val command = ProviderCommand(CommandId("react-fixture"), scope(session).ref, CommandPayload.React(ref, "x"), now, now.plusSeconds(60),
+                session.observeCapabilities(messageScope).first().revision)
+            val accepted = session.execute(command)
+            assertTrue(accepted is DispatchResult.Accepted)
+            assertEquals(1, peer.reactCalls)
+            val result = session.reconcile(ReconcileRequest(command.id, command.route, (accepted as DispatchResult.Accepted).receipt))
+            assertTrue(result is ReconcileResult.Confirmed)
+        }
+    }
+    @Test fun reactionsInGroupsAreNotOffered() = runBlocking {
+        val peer = Peer(binding).apply { threadRows = listOf(SignalThread(7, "Group", false, false, "9")); rows[11] = text() }
+        running(peer) { session, _ ->
+            val messageScope = CapabilityScope.Message(ProviderId("signal"), MessageRef(scope(session).ref, "11"))
+            assertTrue(session.evaluate(OperationRequest(messageScope, Operations.React)) !is Availability.Available)
+        }
     }
     @Test fun quoteMayNotReferenceItself() {
         assertThrows(IllegalArgumentException::class.java) { SignalText(5, 7, "9", "x", false, 1, 1, "Sent", replyTo = 5) }

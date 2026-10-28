@@ -22,6 +22,7 @@ import org.thoughtcrime.securesms.database.model.MessageRecord
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord
 import org.thoughtcrime.securesms.keyvalue.SignalStore
 import org.thoughtcrime.securesms.mms.OutgoingMessage
+import org.thoughtcrime.securesms.mms.QuoteModel
 import org.thoughtcrime.securesms.service.KeyCachingService
 import org.thoughtcrime.securesms.sms.MessageSender
 import org.thoughtcrime.securesms.recipients.Recipient
@@ -129,6 +130,7 @@ internal class BridgeMessaging(private val context: Context) {
         Bundle().apply { putParcelableArrayList("rows", rows) }
       }
       "messageSend", "messageReconcile" -> send(binding, method, extras)
+      "messageReact" -> react(extras)
       else -> error("Unsupported bridge operation")
     }.apply { putInt("messageProtocolVersion", SignalMessagingContract.VERSION) }
   }
@@ -167,6 +169,21 @@ internal class BridgeMessaging(private val context: Context) {
       })
     }
   }
+  /** Own reaction on an exportable message of a direct chat; an identical existing reaction is never resent. */
+  private fun react(extras: Bundle): Bundle {
+    val thread = extras.getLong("thread")
+    val id = extras.getLong("message")
+    val emoji = requireNotNull(extras.getString("emoji"))
+    require(thread > 0 && id > 0 && emoji.isNotBlank() && emoji.length <= 32)
+    val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)
+    val message = SignalDatabase.messages.getMessageRecordOrNull(id)
+    if (recipient == null || (!recipient.isIndividual && !recipient.isSelf) || !recipient.isRegistered || recipient.isBlocked ||
+        message == null || message.threadId != thread || !exportable(message))
+      return Bundle().apply { putString("result", "Rejected") }
+    val own = SignalDatabase.reactions.getReactions(MessageId(id)).find { it.author == Recipient.self().id }
+    if (own?.emoji != emoji) MessageSender.sendNewReaction(context, MessageId(id), emoji)
+    return Bundle().apply { putString("result", "Queued"); putLong("messageId", id) }
+  }
   private fun send(binding: String, method: String, extras: Bundle): Bundle {
     val command = requireNotNull(extras.getString("commandId"))
     require(command.length in 1..128)
@@ -176,8 +193,10 @@ internal class BridgeMessaging(private val context: Context) {
     val state = ledger.read()
     val key = hash(command)
     var entry = state.optJSONObject(key)
+    val replyTo = extras.getLong("replyTo", 0L)
+    require(replyTo >= 0)
     if (entry != null) {
-      check(entry.getLong("thread") == thread)
+      check(entry.getLong("thread") == thread && entry.optLong("replyTo", 0L) == replyTo)
       if (method == "messageSend") check(entry.getString("bodyHash") == hash(requireNotNull(extras.getString("text"))))
       return find(entry)
     }
@@ -188,12 +207,21 @@ internal class BridgeMessaging(private val context: Context) {
     val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)
     if (recipient == null || (!recipient.isIndividual && !recipient.isSelf) || !canSendNormal(recipient, thread))
       return Bundle().apply { putString("result", "Rejected") }
+    // Quote only an exportable, normal text message of this very thread; never media/ephemeral originals.
+    val quote = if (replyTo == 0L) null else {
+      val original = SignalDatabase.messages.getMessageRecordOrNull(replyTo)
+      if (original == null || original.threadId != thread || !exportable(original) || original.body.isEmpty() ||
+          !SignalDatabase.attachments.getAttachmentsForMessage(original.id).all { it.quote })
+        return Bundle().apply { putString("result", "Rejected") }
+      QuoteModel(original.dateSent, if (original.isOutgoing) Recipient.self().id else original.fromRecipient.id,
+        original.body, false, null, emptyList(), QuoteModel.Type.NORMAL, null)
+    }
     check(state.length() < 100_000)
     val timestamp = maxOf(System.currentTimeMillis(), state.optLong("lastTimestamp", 0L) + 1)
-    entry = JSONObject().put("thread", thread).put("timestamp", timestamp).put("bodyHash", hash(text))
+    entry = JSONObject().put("thread", thread).put("timestamp", timestamp).put("bodyHash", hash(text)).put("replyTo", replyTo)
     state.put(key, entry).put("lastTimestamp", timestamp)
     ledger.write(state) // Durable claim BEFORE any potentially effective send; never auto-resend a claim.
-    MessageSender.send(context, OutgoingMessage(threadRecipient = recipient, sentTimeMillis = timestamp, body = text, isSecure = true),
+    MessageSender.send(context, OutgoingMessage(threadRecipient = recipient, sentTimeMillis = timestamp, body = text, isSecure = true, outgoingQuote = quote),
       thread, MessageSender.SendType.SIGNAL, null, null)
     return find(entry)
   }

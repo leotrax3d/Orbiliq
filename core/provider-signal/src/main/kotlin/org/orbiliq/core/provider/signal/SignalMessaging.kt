@@ -60,6 +60,9 @@ interface SignalMessagingTransport {
     suspend fun threads(binding: SignalBinding): List<SignalThread>
     suspend fun texts(binding: SignalBinding, thread: Long, beforeId: Long = Long.MAX_VALUE): SignalTextPage
     suspend fun lookup(binding: SignalBinding, thread: Long, ids: List<Long>): List<SignalText>
-    suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String): SignalSendResult
+    /** [replyTo] quotes a native message of the same thread; the companion validates it again. */
+    suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long? = null): SignalSendResult
     suspend fun reconcileText(binding: SignalBinding, commandId: String, thread: Long): SignalSendResult
+    /** Sets the own reaction (idempotent: an identical existing reaction is not resent). */
+    suspend fun react(binding: SignalBinding, thread: Long, message: Long, emoji: String): SignalSendResult = SignalSendResult.Rejected
 }

@@ -85,7 +85,9 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
     override fun observeUnifiedInbox(): Flow<List<UnifiedInboxEntry>> = observeMessenger().map { it.entries }
     override fun observeTimeline(target: ConversationTarget): Flow<UnifiedTimeline> = flow {
         emitAll(combine(communication().observeTimeline(target), account) { timeline, active ->
-            UnifiedTimeline(timeline.routes.filter { it.conversation.ref.accountId == active }, timeline.messages.filter { it.route.accountId == active })
+            val messages = timeline.messages.filter { it.route.accountId == active }
+            val kept = messages.map { it.id }.toSet()
+            UnifiedTimeline(timeline.routes.filter { it.conversation.ref.accountId == active }, messages, timeline.reactions.filterKeys { it in kept })
         })
     }.flowOn(Dispatchers.IO)
     override suspend fun sendRoutes(target: ConversationTarget, text: String, replyTo: MessageId?) = withContext(Dispatchers.IO) {
@@ -94,6 +96,12 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
     override suspend fun sendText(target: ConversationTarget, route: SendRoute, text: String, replyTo: MessageId?) = withContext(Dispatchers.IO) {
         check(route.conversation.ref.accountId == account.value)
         communication().sendText(target, route, text, replyTo)
+    }
+    override suspend fun canReact(message: MessageId) = withContext(Dispatchers.IO) { account.value != null && communication().canReact(message) }
+    override suspend fun react(message: MessageId, emoji: String) = withContext(Dispatchers.IO) {
+        val active = account.value ?: return@withContext false
+        val owned = ready.await().snapshot().messages.any { it.id == message && it.route.accountId == active }
+        owned && communication().react(message, emoji)
     }
     override suspend fun archiveConversation(id: ConversationId, archived: Boolean) = withContext(Dispatchers.IO) {
         val repository = ready.await()

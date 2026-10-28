@@ -14,7 +14,7 @@ import org.orbiliq.core.provider.api.*
 
 class SignalMessagingProviderFactory(private val transport: SignalMessagingTransport) : ProviderFactory {
     override val descriptor = ProviderDescriptor(ProviderId("signal"), "Signal Companion", "0.3-direct-text-quotes",
-        ContractVersion(1, 0), setOf(Operations.SendText, Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive), ReplayClass.BestEffort)
+        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive), ReplayClass.BestEffort)
     override suspend fun open(account: AccountHandle): ProviderSession {
         require(account.account.providerId == descriptor.id)
         val binding = requireNotNull(transport.binding()) { "signal.messaging.consent-required" }
@@ -104,8 +104,9 @@ class SignalMessagingSession(
             Operations.ReceiveText to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             ReactionReceive to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             QuoteReceive to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
-            Operations.SendText to OperationSupport(if (allowed) Availability.Available(OperationConstraints(maxTextLength = SignalMessagingContract.MAX_TEXT,
-                maxBytes = SignalMessagingContract.MAX_TEXT_BYTES.toLong(), persistentOfflineQueue = true)) else Availability.Restricted(Restriction.Policy),
+            Operations.SendText to sendSupport(allowed),
+            Operations.Reply to sendSupport(allowed),
+            Operations.React to OperationSupport(if (allowed && routeScoped) Availability.Available() else Availability.Restricted(Restriction.Policy),
                 quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security),
             ))
             if (remote == null || thread?.direct == false) put(OperationKey("signal.group.title.receive"),
@@ -113,9 +114,12 @@ class SignalMessagingSession(
         }
         return CapabilitySnapshot(scope, "signal-text-v1:${thread?.canSend}:$ready", now, now.plusSeconds(15), operations)
     }
+    private fun sendSupport(allowed: Boolean) = OperationSupport(if (allowed) Availability.Available(OperationConstraints(maxTextLength = SignalMessagingContract.MAX_TEXT,
+        maxBytes = SignalMessagingContract.MAX_TEXT_BYTES.toLong(), persistentOfflineQueue = true)) else Availability.Restricted(Restriction.Policy),
+        quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security)
     override fun observeCapabilities(scope: CapabilityScope): Flow<CapabilitySnapshot> = combine(state, threadState) { _, _ -> support(scope) }
     override suspend fun evaluate(request: OperationRequest): Availability {
-        if (request.operation == Operations.SendText && request.targetKind in setOf(ConversationKind.Group, ConversationKind.Channel, ConversationKind.Topic))
+        if (request.operation in setOf(Operations.SendText, Operations.Reply) && request.targetKind in setOf(ConversationKind.Group, ConversationKind.Channel, ConversationKind.Topic))
             return Availability.Restricted(Restriction.Policy)
         val availability = support(request.scope).operations[request.operation]?.availability ?: return Availability.Unsupported("signal.operation.unavailable")
         return if (availability is Availability.Available && !availability.constraints.permits(request, clock.instant())) Availability.Restricted(Restriction.Policy) else availability
@@ -231,18 +235,38 @@ class SignalMessagingSession(
         if (job.isActive && cursor.accountId == accountId && cursor.streamId == "signal-snapshot" && cursor.epoch == epoch &&
             cursor.token.toLongOrNull()?.let { it in 1..sequence.get() } == true) OperationResult.Success(Unit)
         else OperationResult.Rejected(ProviderFailure(FailureCategory.SyncConflict))
+    private suspend fun react(command: ProviderCommand, payload: CommandPayload.React): DispatchResult {
+        val thread = command.route.remoteConversationId.toLongOrNull()
+        val message = payload.message.remoteMessageId.toLongOrNull()
+        val scope = CapabilityScope.Message(provider, payload.message)
+        if (!job.isActive || thread == null || message == null || message <= 0 || command.route.accountId != accountId || command.schemaVersion != 1 ||
+            payload.reaction.length > 32 || clock.instant() < command.createdAt || clock.instant() >= command.expiresAt || command.dependencies.isNotEmpty() ||
+            command.capabilityRevision != support(scope).revision || evaluate(OperationRequest(scope, Operations.React)) !is Availability.Available)
+            return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
+        return try {
+            check(transport.binding()?.id == binding.id)
+            when (transport.react(binding, thread, message, payload.reaction)) {
+                is SignalSendResult.Queued -> DispatchResult.Accepted("reaction:$message:${payload.reaction}")
+                SignalSendResult.Rejected -> DispatchResult.Rejected(ProviderFailure(FailureCategory.PolicyExpired))
+                SignalSendResult.Unknown -> DispatchResult.OutcomeUnknown("signal.reaction.unknown")
+            }
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { DispatchResult.OutcomeUnknown("signal.reaction.unknown") }
+    }
     override suspend fun execute(command: ProviderCommand): DispatchResult = sendGate.withLock {
+        (command.payload as? CommandPayload.React)?.let { return react(command, it) }
         val text = command.payload as? CommandPayload.SendText ?: return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
         val thread = command.route.remoteConversationId.toLongOrNull()
         val scope = CapabilityScope.Conversation(provider, command.route)
-        if (!job.isActive || thread == null || command.route.accountId != accountId || text.replyTo != null || command.schemaVersion != 1 ||
+        val replyTo = text.replyTo?.let { ref -> ref.remoteMessageId.toLongOrNull()?.takeIf { it > 0 && ref.conversation == command.route } ?: -1L }
+        if (!job.isActive || thread == null || command.route.accountId != accountId || replyTo == -1L || command.schemaVersion != 1 ||
             clock.instant() < command.createdAt || clock.instant() >= command.expiresAt || command.dependencies.isNotEmpty() ||
-            command.capabilityRevision != support(scope).revision || evaluate(OperationRequest(scope, Operations.SendText, textLength = text.text.length,
+            command.capabilityRevision != support(scope).revision || evaluate(OperationRequest(scope, text.operation, textLength = text.text.length,
                 sizeBytes = text.text.toByteArray(Charsets.UTF_8).size.toLong(), targetKind = ConversationKind.Direct)) !is Availability.Available)
             return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
         return try {
             check(transport.binding()?.id == binding.id)
-            when (val result = transport.sendText(binding, command.id.value, thread, text.text)) {
+            when (val result = transport.sendText(binding, command.id.value, thread, text.text, replyTo)) {
                 is SignalSendResult.Queued -> {
                     commandMessages[messageRef(thread, result.messageId)] = command.id
                     known.getOrPut(thread) { java.util.concurrent.ConcurrentHashMap.newKeySet<Long>() }.add(result.messageId)
@@ -259,6 +283,12 @@ class SignalMessagingSession(
         return try {
             check(transport.binding()?.id == binding.id)
             val thread = request.route.remoteConversationId.toLong()
+            request.receipt?.takeIf { it.startsWith("reaction:") }?.let { receipt ->
+                // Reactions are state, not a message: confirmed once the native own reaction matches.
+                val (message, emoji) = receipt.removePrefix("reaction:").split(":", limit = 2).let { it[0].toLong() to it[1] }
+                val row = transport.lookup(binding, thread, listOf(message)).singleOrNull() ?: return ReconcileResult.StillUnknown
+                return if (row.reactions.any { it.actor == "self" && it.emoji == emoji }) ReconcileResult.Confirmed(null) else ReconcileResult.StillUnknown
+            }
             val result = transport.reconcileText(binding, request.commandId.value, thread)
             if (result !is SignalSendResult.Queued) return ReconcileResult.StillUnknown
             commandMessages[messageRef(thread, result.messageId)] = request.commandId

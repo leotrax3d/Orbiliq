@@ -27,4 +27,8 @@ interface UnifiedCommunication {
     suspend fun sendRoutes(target: ConversationTarget, text: String, replyTo: MessageId? = null): List<RouteAvailability>
     /** Explicit route required. Queued means local durable ownership, not successful delivery. */
     suspend fun sendText(target: ConversationTarget, route: SendRoute, text: String, replyTo: MessageId? = null): SendTextResult
+    /** Only true when the message's own provider currently offers reaction sending for it. */
+    suspend fun canReact(message: MessageId): Boolean = false
+    /** Queues a reaction in the durable outbox; true means queued, not delivered. */
+    suspend fun react(message: MessageId, emoji: String): Boolean = false
 }

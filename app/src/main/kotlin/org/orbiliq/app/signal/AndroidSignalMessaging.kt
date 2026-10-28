@@ -85,8 +85,10 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
         "Rejected" -> SignalSendResult.Rejected
         else -> SignalSendResult.Unknown
     }
-    override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String): SignalSendResult = result(call("messageSend", binding,
-        Bundle().apply { putString("commandId", commandId); putLong("thread", thread); putString("text", text) }))
+    override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long?): SignalSendResult = result(call("messageSend", binding,
+        Bundle().apply { putString("commandId", commandId); putLong("thread", thread); putString("text", text); replyTo?.let { putLong("replyTo", it) } }))
     override suspend fun reconcileText(binding: SignalBinding, commandId: String, thread: Long): SignalSendResult = result(call("messageReconcile", binding,
         Bundle().apply { putString("commandId", commandId); putLong("thread", thread) }))
+    override suspend fun react(binding: SignalBinding, thread: Long, message: Long, emoji: String): SignalSendResult = result(call("messageReact", binding,
+        Bundle().apply { putLong("thread", thread); putLong("message", message); putString("emoji", emoji) }))
 }

@@ -285,7 +285,20 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                             }
                             Text("${time(message)} · ${route.providerId.value}${if (outgoing) " · ${deliveryLabel(message.delivery)}" else ""}", style = MaterialTheme.typography.labelSmall)
                             val canReply by produceState(false, route, message.ref, snapshot.syncNotice) { value = message.ref != null && model.canSend(route, "x", message.id) == true }
-                            if (canReply && message.content is MessageContent.Text) TextButton(onClick = { replyId = message.id.value }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Antworten") }
+                            val canReact by produceState(false, route, message.ref, snapshot.syncNotice) { value = message.ref != null && model.canReact(message.id) }
+                            var picking by remember(message.id) { mutableStateOf(false) }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (canReply && message.content is MessageContent.Text) TextButton(onClick = { replyId = message.id.value }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Antworten") }
+                                if (canReact) TextButton(onClick = { picking = !picking }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Reagieren") }
+                            }
+                            AnimatedVisibility(picking && canReact) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    for (emoji in listOf("\uD83D\uDC4D", "\u2764\uFE0F", "\uD83D\uDE02", "\uD83D\uDE2E", "\uD83D\uDE22", "\uD83D\uDE4F")) {
+                                        TextButton(onClick = { picking = false; model.react(message.id, emoji) },
+                                            modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Mit $emoji reagieren" }) { Text(emoji) }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
