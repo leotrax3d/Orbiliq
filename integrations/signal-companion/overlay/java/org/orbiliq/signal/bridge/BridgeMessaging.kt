@@ -166,7 +166,7 @@ internal class BridgeMessaging(private val context: Context) {
     val width = bitmap.width; val height = bitmap.height
     bitmap.recycle(); bytes.fill(0)
     check(clean.size <= SignalMessagingContract.MAX_IMAGE_BYTES)
-    val uri = org.signal.core.util.contentproviders.BlobProvider.getInstance().forData(clean).withMimeType("image/jpeg")
+    val uri = org.thoughtcrime.securesms.dependencies.AppDependencies.blobs.forData(clean).withMimeType("image/jpeg")
       .createForMultipleSessionsOnDisk(context)
     val ledger = Ledger(context, binding)
     val state = ledger.read()
