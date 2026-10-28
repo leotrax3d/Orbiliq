@@ -146,9 +146,9 @@ class SignalMessagingTest {
             assertEquals(121, events.count { it.payload is ProviderEvent.MessageUpserted })
         }
     }
-    @Test fun groupsExposeReceivedTextAndTitleButNeverUnimplementedSending() = runBlocking {
+    @Test fun readOnlyGroupsExposeTextAndTitleButNeverSending() = runBlocking {
         val peer = Peer(binding).apply {
-            threadRows = listOf(SignalThread(7, "Fixture group", false, true, "9"))
+            threadRows = listOf(SignalThread(7, "Fixture group", false, false, "9"))
             rows[11] = text()
         }
         running(peer) { session, events ->
@@ -156,9 +156,22 @@ class SignalMessagingTest {
             val changed = events.mapNotNull { (it.payload as? ProviderEvent.ConversationChanged)?.conversation }.single()
             assertEquals(ConversationKind.Group, changed.kind)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.ReceiveText)) is Availability.Available)
-            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4)) is Availability.Restricted)
+            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4, sizeBytes = 4, targetKind = ConversationKind.Group)) is Availability.Restricted)
             assertTrue(session.execute(command(session)) is DispatchResult.Rejected)
             assertEquals(0, peer.sendCalls)
+        }
+    }
+    @Test fun writableGroupsFollowTheCompanionsComposerRules() = runBlocking {
+        val peer = Peer(binding).apply {
+            threadRows = listOf(SignalThread(7, "Fixture group", false, true, "9"))
+            rows[11] = text()
+        }
+        running(peer) { session, _ ->
+            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4, sizeBytes = 4, targetKind = ConversationKind.Group)) is Availability.Available)
+            assertTrue(session.execute(command(session)) is DispatchResult.Accepted)
+            assertEquals(1, peer.sendCalls)
+            val messageScope = CapabilityScope.Message(ProviderId("signal"), MessageRef(scope(session).ref, "11"))
+            assertTrue(session.evaluate(OperationRequest(messageScope, Operations.React)) is Availability.Available)
         }
     }
     @Test fun unsupportedNativeContentRemainsAnExplicitPlaceholder() = runBlocking {
@@ -223,7 +236,7 @@ class SignalMessagingTest {
             assertTrue(result is ReconcileResult.Confirmed)
         }
     }
-    @Test fun reactionsInGroupsAreNotOffered() = runBlocking {
+    @Test fun reactionsInReadOnlyGroupsAreNotOffered() = runBlocking {
         val peer = Peer(binding).apply { threadRows = listOf(SignalThread(7, "Group", false, false, "9")); rows[11] = text() }
         running(peer) { session, _ ->
             val messageScope = CapabilityScope.Message(ProviderId("signal"), MessageRef(scope(session).ref, "11"))

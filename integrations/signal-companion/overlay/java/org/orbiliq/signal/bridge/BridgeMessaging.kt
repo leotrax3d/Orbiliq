@@ -44,8 +44,17 @@ internal class BridgeMessaging(private val context: Context) {
   private fun identity(recipient: Recipient): String = if (recipient.isSelf) "self" else
     recipient.serviceId.orElse(null)?.let { "service:" + hash(it.toString()) } ?: recipient.id.toLong().toString()
   private fun canSendNormal(recipient: Recipient, thread: Long): Boolean =
-    !recipient.isGroup && recipient.isRegistered && !recipient.isBlocked && recipient.expiresInSeconds == 0 &&
+    (if (recipient.isGroup) canWriteGroup(recipient) else recipient.isRegistered) && !recipient.isBlocked && recipient.expiresInSeconds == 0 &&
       (SignalStore.settings.universalExpireTimer == 0 || !SignalDatabase.messages.canSetUniversalTimer(thread))
+  /** Same rules as the official composer: active v2 group, full member/admin, announcement groups admin-only. */
+  private fun canWriteGroup(recipient: Recipient): Boolean {
+    if (!recipient.isPushV2Group || !recipient.isActiveGroup) return false
+    val group = SignalDatabase.groups.getGroup(recipient.id).orElse(null) ?: return false
+    val level = group.memberLevel(Recipient.self())
+    val admin = level == org.thoughtcrime.securesms.database.GroupTable.MemberLevel.ADMINISTRATOR
+    return group.isActive && !group.isTerminated && (admin || level == org.thoughtcrime.securesms.database.GroupTable.MemberLevel.FULL_MEMBER) &&
+      (!group.isAnnouncementGroup || admin)
+  }
   private fun currentBinding(): String {
     check(!KeyCachingService.isLocked(context))
     check(SignalStore.account.isRegistered && !SignalStore.account.isPrimaryDevice && !SignalStore.account.isUnauthorizedReceived)
@@ -259,7 +268,7 @@ internal class BridgeMessaging(private val context: Context) {
     require(thread > 0 && id > 0 && emoji.isNotBlank() && emoji.length <= 32)
     val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)
     val message = SignalDatabase.messages.getMessageRecordOrNull(id)
-    if (recipient == null || (!recipient.isIndividual && !recipient.isSelf) || !recipient.isRegistered || recipient.isBlocked ||
+    if (recipient == null || (!recipient.isIndividual && !recipient.isSelf && !recipient.isGroup) || !canSendNormal(recipient, thread) ||
         message == null || message.threadId != thread || !exportable(message))
       return Bundle().apply { putString("result", "Rejected") }
     val own = SignalDatabase.reactions.getReactions(MessageId(id)).find { it.author == Recipient.self().id }
@@ -289,7 +298,7 @@ internal class BridgeMessaging(private val context: Context) {
     require((text.isNotEmpty() || staged != null) && text.length <= SignalMessagingContract.MAX_TEXT)
     require(text.toByteArray(Charsets.UTF_8).size <= SignalServiceMessageLimits.MAX_INLINE_BODY_SIZE_BYTES)
     val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)
-    if (recipient == null || (!recipient.isIndividual && !recipient.isSelf) || !canSendNormal(recipient, thread))
+    if (recipient == null || (!recipient.isIndividual && !recipient.isSelf && !recipient.isGroup) || !canSendNormal(recipient, thread))
       return Bundle().apply { putString("result", "Rejected") }
     // Quote only an exportable, normal text message of this very thread; never media/ephemeral originals.
     val quote = if (replyTo == 0L) null else {

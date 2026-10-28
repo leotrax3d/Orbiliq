@@ -102,7 +102,8 @@ class SignalMessagingSession(
         val thread = remote?.let { threadState.value[it] }
         val routeScoped = scope is CapabilityScope.Conversation || scope is CapabilityScope.Message
         val ready = job.isActive && state.value.auth == AuthState.Ready && validScope(scope) && (!routeScoped || thread != null)
-        val allowed = !routeScoped || (thread?.direct == true && thread.canSend)
+        // The companion decides writability (membership, announcement-only, timers) and reports it per thread.
+        val allowed = !routeScoped || thread?.canSend == true
         val operations = if (!ready) emptyMap() else buildMap {
             putAll(mapOf(
             Operations.ReceiveText to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
@@ -129,7 +130,7 @@ class SignalMessagingSession(
         quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security)
     override fun observeCapabilities(scope: CapabilityScope): Flow<CapabilitySnapshot> = combine(state, threadState) { _, _ -> support(scope) }
     override suspend fun evaluate(request: OperationRequest): Availability {
-        if (request.operation in setOf(Operations.SendText, Operations.Reply) && request.targetKind in setOf(ConversationKind.Group, ConversationKind.Channel, ConversationKind.Topic))
+        if (request.operation in setOf(Operations.SendText, Operations.Reply) && request.targetKind in setOf(ConversationKind.Channel, ConversationKind.Topic))
             return Availability.Restricted(Restriction.Policy)
         val availability = support(request.scope).operations[request.operation]?.availability ?: return Availability.Unsupported("signal.operation.unavailable")
         return if (availability is Availability.Available && !availability.constraints.permits(request, clock.instant())) Availability.Restricted(Restriction.Policy) else availability
@@ -295,7 +296,8 @@ class SignalMessagingSession(
             command.capabilityRevision != support(scope).revision || (body.isEmpty() && image == null) ||
             evaluate(OperationRequest(scope, operation, textLength = body.length,
                 sizeBytes = body.toByteArray(Charsets.UTF_8).size.toLong(),
-                mimeType = if (image == null) null else "image/jpeg", targetKind = ConversationKind.Direct)) !is Availability.Available ||
+                mimeType = if (image == null) null else "image/jpeg",
+                targetKind = if (threadState.value[thread]?.direct == false) ConversationKind.Group else ConversationKind.Direct)) !is Availability.Available ||
             body.toByteArray(Charsets.UTF_8).size > SignalMessagingContract.MAX_TEXT_BYTES)
             return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
         return try {
