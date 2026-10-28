@@ -68,7 +68,11 @@ Versionen liegen im [Version Catalog](gradle/libs.versions.toml).
 Wrapper, Dependency Locks und SHA-256-Verifikation fixieren Build-Eingaben.
 Debug-APKs werden lokal automatisch signiert; unterschiedliche Debug-Schlüssel führen
 zu unterschiedlichen APK-Bytes. Es wird keine bitidentische Signatur zugesichert.
-Eigener Code: [MIT](LICENSE); Abhängigkeiten behalten ihre jeweiligen Lizenzen.
+Lizenz: [GNU AGPL-3.0-or-later](LICENSE) (seit 28.10.2026, zuvor MIT). Orbiliq bettet den
+Signal-Android-Client (AGPL-3.0-only) in eine gemeinsame App ein; das Gesamtwerk ist AGPL.
+Wer die App verbreitet oder als Netzdienst anbietet, muss den vollständigen Quelltext
+bereitstellen. Abhängigkeiten behalten ihre jeweiligen Lizenzen. Orbiliq ist kein offizielles
+Signal-Produkt und nicht mit Signal Messenger LLC verbunden.
 
 ## CI
 

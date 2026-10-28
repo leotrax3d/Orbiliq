@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <application>
+        <activity android:name="org.orbiliq.host.OrbiliqActivity" android:exported="true"
+            android:label="Orbiliq" android:icon="@mipmap/orbiliq_launcher"
+            android:roundIcon="@mipmap/orbiliq_launcher" android:theme="@style/Theme.OrbiliqHost"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

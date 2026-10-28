@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 package org.signal.registration
 
 /** Restored state and navigation must never expose primary-account registration. */

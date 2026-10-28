@@ -10,9 +10,11 @@ import org.orbiliq.core.model.*
 import org.orbiliq.core.provider.signal.*
 
 /** Single application owner of encrypted storage and the current consented Signal session. */
-internal class SignalMessengerRepository(context: Context) : MessengerRepository {
+internal class SignalMessengerRepository(
+    context: Context,
+    private val transport: SignalMessagingTransport = AndroidSignalMessaging(context.applicationContext),
+) : MessengerRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val transport = AndroidSignalMessaging(context.applicationContext)
     private val ready = CompletableDeferred<LocalRepository>()
     private val account = MutableStateFlow<AccountId?>(null)
     private val notice = MutableStateFlow<String?>("Signal-Companion fehlt oder Nachrichtenzugriff ist noch nicht freigegeben.")

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT */
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 package org.orbiliq.signal.bridge
 
 import android.content.Context
@@ -33,7 +33,8 @@ import org.thoughtcrime.securesms.recipients.Recipient
 import org.whispersystems.signalservice.api.messages.SignalServiceMessageLimits
 
 /** No protocol keys leave SignalStore. All exported payloads require a second native grant. */
-internal class BridgeMessaging(private val context: Context) {
+/** [inProcess]: embedded in the single Orbiliq app; there is no foreign caller, so no cross-app grant applies. */
+internal class BridgeMessaging(private val context: Context, private val inProcess: Boolean = false) {
   companion object {
     val gate = Any()
     /** In-flight uploads only; a process death simply fails staging before anything is queued. */
@@ -70,6 +71,7 @@ internal class BridgeMessaging(private val context: Context) {
   }
   fun revoke() = synchronized(gate) { grant.delete() }
   private fun authorizedBinding(): String {
+    if (inProcess) return currentBinding()
     check(BridgeAccess(context).hasConsent())
     val binding = currentBinding()
     check(grant.readFully().toString(Charsets.UTF_8) == "scope-v2:" + binding + ":" + BridgeAccess(context).currentClientSigner())

@@ -11,8 +11,16 @@ import kotlinx.coroutines.withContext
 import org.orbiliq.core.provider.signal.*
 
 /** Application-scoped IPC, independent from Activity lifecycle. No raw errors escape. */
-internal class AndroidSignalMessaging(private val context: Context) : SignalMessagingTransport {
+internal class AndroidSignalMessaging(
+    private val context: Context,
+    /** Raw bridge call. Standalone: signer-checked IPC to the companion. Combined app: direct in-process call. */
+    private val bridge: ((String, Bundle) -> Bundle?)? = null,
+) : SignalMessagingTransport {
     private val uri = Uri.parse("content://${SignalBridgeContract.AUTHORITY}")
+    private fun ipc(method: String, extras: Bundle): Bundle? {
+        check(trusted())
+        return context.contentResolver.acquireUnstableContentProviderClient(uri)?.use { it.call(method, null, extras) }
+    }
     @Suppress("DEPRECATION")
     private fun trusted(): Boolean {
         val pm = context.packageManager
@@ -29,10 +37,9 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
     }
     private suspend fun call(method: String, binding: SignalBinding? = null, extras: Bundle = Bundle()): Bundle = withContext(Dispatchers.IO) {
         try {
-            check(trusted())
             extras.putInt("messageProtocolVersion", SignalMessagingContract.VERSION)
             binding?.let { extras.putString("accountBinding", it.id) }
-            val result = context.contentResolver.acquireUnstableContentProviderClient(uri)?.use { it.call(method, null, extras) }
+            val result = bridge?.invoke(method, extras) ?: if (bridge == null) ipc(method, extras) else null
             check(result != null && result.getInt("messageProtocolVersion", -1) == SignalMessagingContract.VERSION && !result.containsKey("error"))
             result
         } catch (e: kotlinx.coroutines.CancellationException) { throw e }

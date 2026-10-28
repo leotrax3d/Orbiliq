@@ -5,13 +5,12 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
 import org.junit.Test
-import org.orbiliq.app.signal.AndroidSignalMessaging
 
 /** Opt-in: names only the failing read operations, never contents, ids or bindings. */
 class SignalTransportDiagnosticTest {
     @Test fun everyReadOperationSucceedsForTheConsentedAccount() = runBlocking {
         assumeTrue(InstrumentationRegistry.getArguments().getString("signalDiagnose") == "true")
-        val peer = AndroidSignalMessaging(InstrumentationRegistry.getInstrumentation().targetContext)
+        val peer = TestHost.transport(InstrumentationRegistry.getInstrumentation().targetContext)
         val failures = mutableListOf<String>()
         val binding = peer.binding() ?: return@runBlocking assertEquals("binding", "missing")
         val threads = try { peer.threads(binding) } catch (_: Exception) { failures += "threads"; emptyList() }

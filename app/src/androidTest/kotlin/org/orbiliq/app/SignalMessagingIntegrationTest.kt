@@ -3,10 +3,6 @@ package org.orbiliq.app
 import android.net.Uri
 import android.os.Bundle
 import androidx.test.platform.app.InstrumentationRegistry
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
 import java.util.UUID
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -14,7 +10,6 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
-import org.orbiliq.app.signal.AndroidSignalMessaging
 import org.orbiliq.core.domain.*
 import org.orbiliq.core.model.*
 import org.orbiliq.core.provider.signal.*
@@ -26,12 +21,12 @@ class SignalMessagingIntegrationTest {
 
     @Test fun statusConsentDoesNotPermitMessaging() = runBlocking {
         assumeTrue("Requires explicit denied-grant fixture", args.getString("signalMessaging") == "denied")
-        assertNull(AndroidSignalMessaging(context).binding())
+        assertNull(TestHost.transport(context).binding())
     }
 
     @Test fun consentedBindingIsStableAndForeignBindingCannotRead() = runBlocking {
         assumeTrue("Requires native message consent", args.getString("signalMessaging") == "granted")
-        val peer = AndroidSignalMessaging(context)
+        val peer = TestHost.transport(context)
         val binding = withTimeout(15_000) {
             var value = peer.binding()
             while (value == null) { kotlinx.coroutines.delay(200); value = peer.binding() }
@@ -42,15 +37,12 @@ class SignalMessagingIntegrationTest {
         assertTrue(threads.size <= SignalMessagingContract.MAX_THREADS)
         assertTrue(threads.single { it.peer == "self" }.let { it.direct && it.canSend })
         val wrong = if (binding.id == "00".repeat(32)) "11".repeat(32) else "00".repeat(32)
-        val denied = context.contentResolver.call(Uri.parse("content://${SignalBridgeContract.AUTHORITY}"), "messageThreads", null,
-            Bundle().apply { putInt("messageProtocolVersion", SignalMessagingContract.VERSION); putString("accountBinding", wrong) })!!
-        assertTrue(denied.keySet() == setOf("error"))
-        assertTrue(denied.getString("error") == "Unavailable")
+        assertTrue("Foreign binding was accepted", TestHost.foreignBindingRejected(context, wrong))
     }
 
     @Test fun selfTextTraversesPersistentOutboxNativeQueueAndProjectionOnce() = runBlocking {
         assumeTrue("Explicit self-send opt-in required", args.getString("signalSelfSend") == "true")
-        val repository = EntryPointAccessors.fromApplication(context, ConversationRepositoryEntryPoint::class.java).conversations() as MessengerRepository
+        val repository = TestHost.messenger(context)
         val snapshot = withTimeout(60_000) { repository.observeMessenger().first { s ->
             s.accounts.any { account -> account.ownIdentityId != null && s.entries.any { it.route.conversation.participants == setOf(account.ownIdentityId) } }
         } }
@@ -70,7 +62,7 @@ class SignalMessagingIntegrationTest {
                 it.delivery in setOf(DeliveryState.Sent, DeliveryState.Delivered, DeliveryState.Read) }
         } }
         assertTrue("Own test message was duplicated", timeline.messages.count { (it.content as? MessageContent.Text)?.text == marker } == 1)
-        val peer = AndroidSignalMessaging(context)
+        val peer = TestHost.transport(context)
         val binding = requireNotNull(peer.binding())
         assertTrue(SignalMessagingSession.accountFor(binding).id == route.conversation.ref.accountId)
         val repeat = peer.sendText(binding, commandId.value, route.conversation.ref.remoteConversationId.toLong(), marker)
@@ -81,7 +73,7 @@ class SignalMessagingIntegrationTest {
     /** Opt-in, own "Notiz an mich" only: reply, reaction and a synthetic image through the real outbox and companion. */
     @Test fun selfReplyReactionAndImageRoundTrip() = runBlocking {
         assumeTrue("Explicit self-send opt-in required", args.getString("signalSelfSend") == "true")
-        val repository = EntryPointAccessors.fromApplication(context, ConversationRepositoryEntryPoint::class.java).conversations() as MessengerRepository
+        val repository = TestHost.messenger(context)
         val snapshot = withTimeout(60_000) { repository.observeMessenger().first { s ->
             s.accounts.any { account -> account.ownIdentityId != null && s.entries.any { it.route.conversation.participants == setOf(account.ownIdentityId) } }
         } }
@@ -123,7 +115,7 @@ class SignalMessagingIntegrationTest {
     /** Opt-in, own "Notiz an mich" only: a synthetic text document is sent unchanged and read back from the companion. */
     @Test fun selfDocumentRoundTripKeepsBytes() = runBlocking {
         assumeTrue("Explicit self-send opt-in required", args.getString("signalSelfSend") == "true")
-        val repository = EntryPointAccessors.fromApplication(context, ConversationRepositoryEntryPoint::class.java).conversations() as MessengerRepository
+        val repository = TestHost.messenger(context)
         val snapshot = withTimeout(60_000) { repository.observeMessenger().first { s ->
             s.accounts.any { account -> account.ownIdentityId != null && s.entries.any { it.route.conversation.participants == setOf(account.ownIdentityId) } }
         } }
@@ -148,7 +140,7 @@ class SignalMessagingIntegrationTest {
     /** Opt-in, own "Notiz an mich" only: edit an own text, then delete it for everyone. */
     @Test fun selfEditThenDeleteForEveryone() = runBlocking<Unit> {
         assumeTrue("Explicit self-send opt-in required", args.getString("signalSelfSend") == "true")
-        val repository = EntryPointAccessors.fromApplication(context, ConversationRepositoryEntryPoint::class.java).conversations() as MessengerRepository
+        val repository = TestHost.messenger(context)
         val snapshot = withTimeout(60_000) { repository.observeMessenger().first { s ->
             s.accounts.any { account -> account.ownIdentityId != null && s.entries.any { it.route.conversation.participants == setOf(account.ownIdentityId) } }
         } }
@@ -189,7 +181,7 @@ class SignalMessagingIntegrationTest {
     /** Opt-in, own "Notiz an mich" only: remove an own reaction, mark read, then delete for me. */
     @Test fun selfUnreactReadAndDeleteForMe() = runBlocking<Unit> {
         assumeTrue("Explicit self-send opt-in required", args.getString("signalSelfSend") == "true")
-        val repository = EntryPointAccessors.fromApplication(context, ConversationRepositoryEntryPoint::class.java).conversations() as MessengerRepository
+        val repository = TestHost.messenger(context)
         val (route, target) = selfChat(repository)
         val marker = "Orbiliq Aktionstest ${UUID.randomUUID()}"
         assertTrue(repository.sendText(target, route, marker) is SendTextResult.Queued)
@@ -211,7 +203,7 @@ class SignalMessagingIntegrationTest {
     /** Opt-in, own "Notiz an mich" only: synthetic voice note and a synthetic MP4 carrying a GPS location. */
     @Test fun selfVoiceNoteAndVideoArriveWithoutLocation() = runBlocking<Unit> {
         assumeTrue("Explicit self-send opt-in required", args.getString("signalSelfSend") == "true")
-        val repository = EntryPointAccessors.fromApplication(context, ConversationRepositoryEntryPoint::class.java).conversations() as MessengerRepository
+        val repository = TestHost.messenger(context)
         val (route, target) = selfChat(repository)
         assertTrue(repository.canSendMedia(route, AttachmentKind.VoiceNote))
         val voice = repository.sendMedia(target, route, AttachmentKind.VoiceNote, silentAac(), "audio/aac", null)

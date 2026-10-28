@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 package org.orbiliq.core.provider.signal
 
 /** Separate opt-in protocol. The v1 status grant never permits these operations. */
