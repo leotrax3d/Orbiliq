@@ -78,9 +78,13 @@ Freigegebene Capabilities (Stand `586a3c2`), jeweils nur, wenn die Strecke imple
 | `message.quoted-reply.send`, `signal.quote.receive` | Zitat nur auf exportierbare Textnachricht desselben Direktchats |
 | `reaction.add`, `signal.reaction.receive` | eigene Reaktion setzen/ändern (idempotent); Entfernen nicht freigegeben |
 | `signal.image.receive` | JPEG/PNG/WebP/GIF bis 16 MiB, Abruf auf Tippen, nur im Speicher |
-| `message.media.image.send` | JPEG ohne Metadaten (doppelt neu kodiert), Direktchats |
+| `message.media.image.send` | JPEG ohne Metadaten (doppelt neu kodiert) |
 
-Nicht freigegeben: Gruppenversand/-verwaltung, Video/Audio/Sprachnachrichten/Dateien,
+Senden (Text, Antwort, Reaktion, Bild) gilt für Direktchats und für Gruppen, in denen das
+offizielle Eingabefeld schreiben ließe: aktive v2-Gruppe, Voll-/Adminmitglied,
+Ankündigungsgruppen nur für Admins, ohne Ablauftimer.
+
+Nicht freigegeben: Gruppenverwaltung, Video/Audio/Sprachnachrichten/Dateien,
 Bearbeiten, Löschen, Typing, Read-Receipt-Versand, Suche, Calls, Stories,
 View-once und verschwindende Inhalte (bleiben nativ). Diese Liste beschreibt die
 implementierte Adapterstrecke, nicht alle Fähigkeiten des nativen Clients.

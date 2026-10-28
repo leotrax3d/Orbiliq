@@ -11,7 +11,10 @@ Bilder zusätzlich auf Hardware bestanden (lokal gebauter Companion `a52d81f`, 1
 Antwort mit Zitatbezug, eigene Reaktion nativ bestätigt, synthetisches Bild gesendet
 und als echtes Signal-Bild wieder geladen – ausschließlich in „Notiz an mich“.
 Noch offen: Empfang von fremden Geräten, Neustart/Offline/Widerruf/Doze-Nachweis,
-Gruppenversand, Video/Audio/Dateien, Bearbeiten/Löschen.
+Video/Audio/Dateien, Bearbeiten/Löschen. Gruppenversand ist implementiert
+(`afae158`, Regeln des offiziellen Eingabefelds) und JVM-getestet; kein Gerätetest,
+da Gruppennachrichten andere Personen erreichen (nur mit ausdrücklicher Freigabe).
+Neun Gerätetests nach Installation dieses Builds bestanden (13,8 s).
 Details: [Signal-Provider](architecture/signal-provider.md), [Übergabe](SIGNAL_HANDOFF.md).
 
 Aktueller Entwicklungsnachtrag zu Prompt 11: Die [direkte Signal-Textstrecke](architecture/signal-provider.md)
