@@ -14,7 +14,9 @@ import org.orbiliq.core.provider.api.*
 
 class SignalMessagingProviderFactory(private val transport: SignalMessagingTransport) : ProviderFactory {
     override val descriptor = ProviderDescriptor(ProviderId("signal"), "Signal Companion", "0.3-direct-text-quotes",
-        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.EditText, Operations.DeleteAll, Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive, SignalMessagingSession.FileReceive,
+        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.EditText, Operations.DeleteAll, Operations.DeleteSelf,
+        Operations.ReadReceipt, Operations.Typing, SignalMessagingSession.ReactionRemove, SignalMessagingSession.GroupRename, SignalMessagingSession.GroupLeave,
+        Operations.sendMedia(AttachmentKind.VoiceNote), Operations.sendMedia(AttachmentKind.Video), Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive, SignalMessagingSession.FileReceive,
         Operations.sendMedia(AttachmentKind.File)), ReplayClass.BestEffort)
     override suspend fun open(account: AccountHandle): ProviderSession {
         require(account.account.providerId == descriptor.id)
@@ -81,11 +83,16 @@ class SignalMessagingSession(
         val ImageReceive = OperationKey("signal.image.receive")
         fun attachmentId(account: AccountId, image: Long) = AttachmentId("${account.value}:image:$image")
         fun stagedId(account: AccountId, token: String) = AttachmentId("${account.value}:staged:$token")
+        val ReactionRemove = OperationKey("reaction.remove")
+        val GroupRename = OperationKey("group.rename")
+        val GroupLeave = OperationKey("group.leave")
         /** Audio, voice notes, video and documents: fetched on demand, played or saved explicitly by the user. */
         val FileReceive = OperationKey("signal.file.receive")
         fun fileId(account: AccountId, file: SignalFile) = AttachmentId("${account.value}:file:${file.id}:${file.kind}")
         fun kindOf(attachment: AttachmentId): AttachmentKind? = when {
             ":image:" in attachment.value || ":staged:" in attachment.value -> AttachmentKind.Image
+            ":stagedvoice:" in attachment.value -> AttachmentKind.VoiceNote
+            ":stagedvideo:" in attachment.value -> AttachmentKind.Video
             ":stagedfile:" in attachment.value -> AttachmentKind.File
             ":file:" in attachment.value -> when (attachment.value.substringAfterLast(":")) {
                 "voice" -> AttachmentKind.VoiceNote; "audio" -> AttachmentKind.Audio; "video" -> AttachmentKind.Video; "file" -> AttachmentKind.File
@@ -140,6 +147,18 @@ class SignalMessagingSession(
             Operations.React to OperationSupport(if (allowed && routeScoped) Availability.Available() else Availability.Restricted(Restriction.Policy),
                 quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security),
             ))
+            fun simple(ok: Boolean) = OperationSupport(if (ok) Availability.Available() else Availability.Restricted(Restriction.Policy),
+                quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security)
+            put(ReactionRemove, simple(allowed && routeScoped))
+            put(Operations.ReadReceipt, simple(routeScoped))
+            put(Operations.Typing, simple(allowed && routeScoped))
+            put(GroupRename, simple(thread?.canRename == true))
+            put(GroupLeave, simple(thread?.canLeave == true))
+            for (kind in listOf(AttachmentKind.VoiceNote, AttachmentKind.Video)) put(Operations.sendMedia(kind), OperationSupport(
+                if (allowed) Availability.Available(OperationConstraints(maxBytes = SignalMessagingContract.MAX_FILE_BYTES,
+                    maxTextLength = SignalMessagingContract.MAX_TEXT, persistentOfflineQueue = true)) else Availability.Restricted(Restriction.Policy),
+                quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security))
+            if (scope is CapabilityScope.Message && scope.ref.remoteMessageId.toLongOrNull()?.let { messageRights.containsKey(it) } == true) put(Operations.DeleteSelf, simple(true))
             (scope as? CapabilityScope.Message)?.ref?.remoteMessageId?.toLongOrNull()?.let { messageRights[it] }?.let { (edit, delete) ->
                 put(Operations.EditText, if (allowed && edit) sendSupport(true) else OperationSupport(Availability.Restricted(Restriction.Policy), security = security))
                 put(Operations.DeleteAll, OperationSupport(if (allowed && delete) Availability.Available() else Availability.Restricted(Restriction.Policy),
@@ -303,15 +322,55 @@ class SignalMessagingSession(
         catch (_: Exception) { null }
     }
     /** Stages a document unchanged; images and videos must use their dedicated paths. */
-    suspend fun stageFile(bytes: ByteArray, mimeType: String, name: String?): AttachmentId? {
-        if (!job.isActive || bytes.isEmpty() || bytes.size > SignalMessagingContract.MAX_FILE_BYTES ||
-            mimeType.startsWith("image/") || mimeType.startsWith("video/")) return null
+    suspend fun stageFile(bytes: ByteArray, mimeType: String, name: String?): AttachmentId? =
+        if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) null else stageMedia(bytes, mimeType, name, "doc", "stagedfile")
+    /** Recorded voice note (audio), sent as a Signal voice message. */
+    suspend fun stageVoice(bytes: ByteArray, mimeType: String): AttachmentId? =
+        if (!mimeType.startsWith("audio/")) null else stageMedia(bytes, mimeType, null, "voice", "stagedvoice")
+    /** MP4 video; the companion remuxes it so container metadata such as location is dropped. */
+    suspend fun stageVideo(bytes: ByteArray): AttachmentId? = stageMedia(bytes, "video/mp4", null, "video", "stagedvideo")
+    private suspend fun stageMedia(bytes: ByteArray, mimeType: String, name: String?, slide: String, prefix: String): AttachmentId? {
+        if (!job.isActive || bytes.isEmpty() || bytes.size > SignalMessagingContract.MAX_FILE_BYTES) return null
         val token = UUID.randomUUID().toString().replace("-", "")
         return try {
             check(transport.binding()?.id == binding.id)
-            if (sendGate.withLock { transport.stageFile(binding, token, bytes, mimeType, name) }) AttachmentId("${accountId.value}:stagedfile:$token") else null
+            if (sendGate.withLock { transport.stageFile(binding, token, bytes, mimeType, name, slide) }) AttachmentId("${accountId.value}:$prefix:$token") else null
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { null }
+    }
+    private suspend fun act(scope: CapabilityScope, operation: OperationKey, method: String, extras: Map<String, Any>): Boolean {
+        if (!job.isActive || evaluate(OperationRequest(scope, operation)) !is Availability.Available) return false
+        return try {
+            check(transport.binding()?.id == binding.id)
+            sendGate.withLock { transport.action(binding, method, extras) } != SignalSendResult.Rejected
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { false }
+    }
+    private fun threadOf(ref: ConversationRef) = ref.remoteConversationId.toLongOrNull()?.takeIf { ref.accountId == accountId }
+    /** Marks the chat read up to [until]; Signal sends receipts only if the user enabled them. */
+    suspend fun markRead(conversation: ConversationRef, until: Instant): Boolean {
+        val thread = threadOf(conversation) ?: return false
+        return act(CapabilityScope.Conversation(provider, conversation), Operations.ReadReceipt, "messageRead", mapOf("thread" to thread, "until" to until.toEpochMilli()))
+    }
+    /** Typing indicator; silently refused when the user disabled typing indicators in Signal. */
+    suspend fun typing(conversation: ConversationRef, active: Boolean): Boolean {
+        val thread = threadOf(conversation) ?: return false
+        return act(CapabilityScope.Conversation(provider, conversation), Operations.Typing, "messageTyping", mapOf("thread" to thread, "active" to active))
+    }
+    suspend fun removeReaction(message: MessageRef): Boolean {
+        val thread = threadOf(message.conversation) ?: return false
+        val id = message.remoteMessageId.toLongOrNull() ?: return false
+        return act(CapabilityScope.Message(provider, message), ReactionRemove, "messageUnreact", mapOf("thread" to thread, "message" to id))
+    }
+    suspend fun renameGroup(conversation: ConversationRef, title: String): Boolean {
+        val thread = threadOf(conversation) ?: return false
+        val trimmed = title.trim()
+        if (trimmed.isEmpty() || trimmed.codePointCount(0, trimmed.length) > 32) return false
+        return act(CapabilityScope.Conversation(provider, conversation), GroupRename, "groupRename", mapOf("thread" to thread, "title" to trimmed))
+    }
+    suspend fun leaveGroup(conversation: ConversationRef): Boolean {
+        val thread = threadOf(conversation) ?: return false
+        return act(CapabilityScope.Conversation(provider, conversation), GroupLeave, "groupLeave", mapOf("thread" to thread))
     }
     override suspend fun execute(command: ProviderCommand): DispatchResult = sendGate.withLock {
         (command.payload as? CommandPayload.React)?.let { return react(command, it) }
@@ -324,8 +383,11 @@ class SignalMessagingSession(
         }
         (command.payload as? CommandPayload.Delete)?.let { return remoteDelete(command, it) }
         (command.payload as? CommandPayload.SendMedia)?.let { media ->
-            val prefix = "${accountId.value}:" + if (media.kind == AttachmentKind.File) "stagedfile:" else "staged:"
-            val token = media.attachment.value.takeIf { media.kind in setOf(AttachmentKind.Image, AttachmentKind.File) && it.startsWith(prefix) }?.removePrefix(prefix)
+            val prefix = "${accountId.value}:" + when (media.kind) {
+                AttachmentKind.File -> "stagedfile:"; AttachmentKind.VoiceNote -> "stagedvoice:"; AttachmentKind.Video -> "stagedvideo:"; else -> "staged:"
+            }
+            val token = media.attachment.value.takeIf { media.kind in setOf(AttachmentKind.Image, AttachmentKind.File, AttachmentKind.VoiceNote, AttachmentKind.Video) &&
+                it.startsWith(prefix) }?.removePrefix(prefix)
                 ?.takeIf { it.matches(Regex("[0-9a-f]{32}")) } ?: return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
             return dispatch(command, media.caption.orEmpty(), null, token, media.operation)
         }
@@ -338,12 +400,14 @@ class SignalMessagingSession(
         val thread = command.route.remoteConversationId.toLongOrNull()
         val message = payload.message.remoteMessageId.toLongOrNull()
         val scope = CapabilityScope.Message(provider, payload.message)
-        if (!payload.forEveryone || !job.isActive || thread == null || message == null || message <= 0 || command.route.accountId != accountId ||
-            clock.instant() >= command.expiresAt || evaluate(OperationRequest(scope, Operations.DeleteAll)) !is Availability.Available)
+        val operation = if (payload.forEveryone) Operations.DeleteAll else Operations.DeleteSelf
+        if (!job.isActive || thread == null || message == null || message <= 0 || command.route.accountId != accountId ||
+            clock.instant() >= command.expiresAt || evaluate(OperationRequest(scope, operation)) !is Availability.Available)
             return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
         return try {
             check(transport.binding()?.id == binding.id)
-            when (transport.deleteForEveryone(binding, thread, message)) {
+            when (if (payload.forEveryone) transport.deleteForEveryone(binding, thread, message)
+                  else transport.action(binding, "messageDeleteLocal", mapOf("thread" to thread, "message" to message))) {
                 is SignalSendResult.Queued -> DispatchResult.Accepted("delete:$message")
                 SignalSendResult.Rejected -> DispatchResult.Rejected(ProviderFailure(FailureCategory.PolicyExpired))
                 SignalSendResult.Unknown -> DispatchResult.OutcomeUnknown("signal.delete.unknown")

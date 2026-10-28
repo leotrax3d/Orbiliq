@@ -23,7 +23,8 @@ class SignalBinding(val id: String) {
     init { require(id.matches(Regex("[0-9a-f]{64}"))) }
     override fun toString() = "SignalBinding(redacted)"
 }
-class SignalThread(val id: Long, val title: String, val direct: Boolean, val canSend: Boolean, val peer: String) {
+class SignalThread(val id: Long, val title: String, val direct: Boolean, val canSend: Boolean, val peer: String,
+                   val canRename: Boolean = false, val canLeave: Boolean = false) {
     init { require(id > 0); require(title.length <= 512); require(peer == "self" || peer.matches(Regex("[0-9]+|service:[0-9a-f]{64}"))) }
     override fun toString() = "SignalThread(redacted)"
 }
@@ -95,7 +96,9 @@ interface SignalMessagingTransport {
     suspend fun attachment(binding: SignalBinding, thread: Long, message: Long, attachment: Long): Pair<String, ByteArray>? = null
     suspend fun deleteForEveryone(binding: SignalBinding, thread: Long, message: Long): SignalSendResult = SignalSendResult.Rejected
     /** Stages a non-image, non-video file unchanged (the user picked it as a document). */
-    suspend fun stageFile(binding: SignalBinding, token: String, bytes: ByteArray, mimeType: String, name: String?): Boolean = false
+    suspend fun stageFile(binding: SignalBinding, token: String, bytes: ByteArray, mimeType: String, name: String?, slide: String = "doc"): Boolean = false
+    /** Simple native actions; each returns Queued/Rejected and is idempotent in the companion. */
+    suspend fun action(binding: SignalBinding, method: String, extras: Map<String, Any>): SignalSendResult = SignalSendResult.Rejected
     /** Hands a JPEG to the companion's encrypted store; true once fully staged under [token]. */
     suspend fun stageImage(binding: SignalBinding, token: String, jpeg: ByteArray): Boolean = false
 }

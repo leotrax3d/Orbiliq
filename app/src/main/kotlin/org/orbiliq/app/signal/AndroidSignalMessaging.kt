@@ -51,7 +51,8 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
         do {
             val bundle = call("messageThreads", binding, Bundle().apply { putLong("afterThread", after) })
             val page = rows(bundle).map {
-                SignalThread(it.getLong("id"), requireNotNull(it.getString("title")), it.getBoolean("direct"), it.getBoolean("canSend"), requireNotNull(it.getString("peer")))
+                SignalThread(it.getLong("id"), requireNotNull(it.getString("title")), it.getBoolean("direct"), it.getBoolean("canSend"), requireNotNull(it.getString("peer")),
+                    it.getBoolean("canRename"), it.getBoolean("canLeave"))
             }
             require(page.size <= SignalMessagingContract.PAGE_SIZE && page.all { it.id > after })
             result += page
@@ -78,8 +79,18 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
         require(ids.size == types.size && ids.size == sizes.size && ids.size == kinds.size)
         return ids.indices.map { SignalFile(ids[it], types[it], sizes[it], kinds[it]) }
     }
-    override suspend fun stageFile(binding: SignalBinding, token: String, bytes: ByteArray, mimeType: String, name: String?): Boolean =
-        stage(binding, token, bytes) { putString("fileType", mimeType); name?.let { putString("fileName", it) } }
+    override suspend fun stageFile(binding: SignalBinding, token: String, bytes: ByteArray, mimeType: String, name: String?, slide: String): Boolean =
+        stage(binding, token, bytes) { putString("fileType", mimeType); putString("slide", slide); name?.let { putString("fileName", it) } }
+    private val actions = setOf("messageDeleteLocal", "messageUnreact", "messageRead", "messageTyping", "groupRename", "groupLeave")
+    override suspend fun action(binding: SignalBinding, method: String, extras: Map<String, Any>): SignalSendResult {
+        require(method in actions)
+        return result(call(method, binding, Bundle().apply {
+            extras.forEach { (key, value) -> when (value) {
+                is Long -> putLong(key, value); is Boolean -> putBoolean(key, value); is String -> putString(key, value)
+                else -> error("Unsupported extra")
+            } }
+        }))
+    }
     @Suppress("DEPRECATION")
     override suspend fun attachment(binding: SignalBinding, thread: Long, message: Long, attachment: Long): Pair<String, ByteArray>? = withContext(Dispatchers.IO) {
         val result = call("messageImage", binding, Bundle().apply { putLong("thread", thread); putLong("message", message); putLong("attachment", attachment) })
@@ -115,7 +126,7 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
     override suspend fun lookup(binding: SignalBinding, thread: Long, ids: List<Long>): List<SignalText> = decode(call("messageLookup", binding,
         Bundle().apply { putLong("thread", thread); putLongArray("ids", ids.toLongArray()) }))
     private fun result(bundle: Bundle): SignalSendResult = when (bundle.getString("result")) {
-        "Queued" -> SignalSendResult.Queued(bundle.getLong("messageId"))
+        "Queued" -> bundle.getLong("messageId").takeIf { it > 0 }?.let { SignalSendResult.Queued(it) } ?: SignalSendResult.Unknown
         "Rejected" -> SignalSendResult.Rejected
         else -> SignalSendResult.Unknown
     }

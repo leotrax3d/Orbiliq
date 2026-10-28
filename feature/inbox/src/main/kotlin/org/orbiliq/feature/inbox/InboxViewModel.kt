@@ -47,6 +47,39 @@ class InboxViewModel(repository: ConversationRepository) : ViewModel() {
         }
     } catch (c: CancellationException) { throw c }
       catch (_: Exception) { _notice.value = "Nachricht konnte nicht gespeichert werden. Bitte erneut versuchen."; false }
+    private suspend fun <T> safe(fallback: T, block: suspend () -> T): T = try { block() } catch (c: CancellationException) { throw c } catch (_: Exception) { fallback }
+    fun markRead(route: SendRoute, until: java.time.Instant) { viewModelScope.launch { safe(false) { messenger?.markRead(route, until) == true } } }
+    fun setTyping(route: SendRoute, active: Boolean) { viewModelScope.launch { safe(false) { messenger?.setTyping(route, active) == true } } }
+    fun removeReaction(message: MessageId) { viewModelScope.launch {
+        if (!safe(false) { messenger?.removeReaction(message) == true }) _notice.value = "Reaktion konnte nicht entfernt werden."
+    } }
+    suspend fun canDeleteForMe(message: MessageId) = safe(false) { messenger?.canDeleteForMe(message) == true }
+    fun deleteForMe(message: MessageId) { viewModelScope.launch {
+        if (!safe(false) { messenger?.deleteForMe(message) == true }) _notice.value = "Löschen nicht möglich."
+    } }
+    suspend fun canRenameGroup(route: SendRoute) = safe(false) { messenger?.canRenameGroup(route) == true }
+    suspend fun canLeaveGroup(route: SendRoute) = safe(false) { messenger?.canLeaveGroup(route) == true }
+    suspend fun renameGroup(route: SendRoute, title: String) = safe(false) { messenger?.renameGroup(route, title) == true }
+        .also { if (!it) _notice.value = "Gruppe konnte nicht umbenannt werden." }
+    suspend fun leaveGroup(route: SendRoute) = safe(false) { messenger?.leaveGroup(route) == true }
+        .also { if (!it) _notice.value = "Gruppe konnte nicht verlassen werden (als einziger Admin zuerst einen Admin ernennen)." }
+    suspend fun canSendMedia(route: SendRoute, kind: AttachmentKind) = safe(false) { messenger?.canSendMedia(route, kind) == true }
+    suspend fun sendVoice(route: SendRoute, bytes: ByteArray): Boolean = safe(false) {
+        messenger?.sendMedia(ConversationTarget.ProviderChat(route.conversation.ref), route, AttachmentKind.VoiceNote, bytes, "audio/aac", null) is SendTextResult.Queued
+    }.also { if (!it) _notice.value = "Sprachnachricht konnte nicht gesendet werden." }
+    suspend fun sendVideo(route: SendRoute, uri: android.net.Uri, resolver: android.content.ContentResolver, caption: String?): Boolean = safe(false) {
+        if (resolver.getType(uri) != "video/mp4") { _notice.value = "Nur MP4-Videos werden unterstützt."; return@safe false }
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            resolver.openInputStream(uri)?.use { input ->
+                val out = java.io.ByteArrayOutputStream(); val buffer = ByteArray(64 * 1024)
+                while (true) { val n = input.read(buffer); if (n < 0) break; out.write(buffer, 0, n); if (out.size() > 64 * 1024 * 1024) return@use null }
+                out.toByteArray()
+            }
+        }
+        if (bytes == null) { _notice.value = "Video ist größer als 64 MB."; return@safe false }
+        (messenger?.sendMedia(ConversationTarget.ProviderChat(route.conversation.ref), route, AttachmentKind.Video, bytes, "video/mp4",
+            caption?.trim()?.ifEmpty { null }) is SendTextResult.Queued).also { if (!it) _notice.value = "Videoversand nicht verfügbar." }
+    }
     suspend fun canEdit(message: MessageId) = try { messenger?.canEdit(message) == true } catch (c: CancellationException) { throw c } catch (_: Exception) { false }
     suspend fun canDeleteForEveryone(message: MessageId) = try { messenger?.canDeleteForEveryone(message) == true } catch (c: CancellationException) { throw c } catch (_: Exception) { false }
     suspend fun edit(message: MessageId, text: String): Boolean = try {

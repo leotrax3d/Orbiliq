@@ -236,6 +236,9 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
     var replyId by rememberSaveable(route.conversation.id.value) { mutableStateOf<String?>(null) }
     var editId by rememberSaveable(route.conversation.id) { mutableStateOf<String?>(null) }
     var deleteId by remember { mutableStateOf<String?>(null) }
+    var deleteMineId by remember { mutableStateOf<String?>(null) }
+    var renaming by remember { mutableStateOf(false) }
+    var leaving by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf(false) }
     var archiveDialog by remember { mutableStateOf(false) }
@@ -300,6 +303,8 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                                 if (canEdit && message.content is MessageContent.Text) TextButton(onClick = { editId = message.id.value; draft = (message.content as MessageContent.Text).text },
                                     modifier = Modifier.heightIn(min = 48.dp)) { Text("Bearbeiten") }
                                 if (canDelete) TextButton(onClick = { deleteId = message.id.value }, modifier = Modifier.heightIn(min = 48.dp)) { Text("F\u00fcr alle l\u00f6schen") }
+                                val canDeleteMine by produceState(false, message.ref, snapshot.syncNotice) { value = message.ref != null && model.canDeleteForMe(message.id) }
+                                if (canDeleteMine) TextButton(onClick = { deleteMineId = message.id.value }, modifier = Modifier.heightIn(min = 48.dp)) { Text("F\u00fcr mich l\u00f6schen") }
                             }
                             AnimatedVisibility(picking && canReact) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -307,6 +312,8 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                                         TextButton(onClick = { picking = false; model.react(message.id, emoji) },
                                             modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Mit $emoji reagieren" }) { Text(emoji) }
                                     }
+                                    TextButton(onClick = { picking = false; model.removeReaction(message.id) },
+                                        modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Eigene Reaktion entfernen" }) { Text("\u2715") }
                                 }
                             }
                         }
@@ -314,6 +321,9 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                 }
             }
         }
+        val newestIncoming = timeline.messages.lastOrNull { it.direction == MessageDirection.Incoming && it.ref != null }
+        LaunchedEffect(newestIncoming?.id) { newestIncoming?.let { model.markRead(route, it.serverTime ?: it.receivedAt) } }
+        DisposableEffect(route) { onDispose { model.setTyping(route, false) } }
         AnimatedVisibility(editId != null) {
             Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Nachricht bearbeiten", Modifier.weight(1f))
@@ -345,12 +355,43 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                     finally { sending = false }
                 }
             }
+            val canVoice by produceState(false, route, snapshot.syncNotice) { value = model.canSendMedia(route, AttachmentKind.VoiceNote) }
+            val canVideo by produceState(false, route, snapshot.syncNotice) { value = model.canSendMedia(route, AttachmentKind.Video) }
+            var recorder by remember { mutableStateOf<VoiceRecorder?>(null) }
+            DisposableEffect(route) { onDispose { recorder?.cancel(); recorder = null } }
+            val micPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+                if (granted) recorder = VoiceRecorder.start(context.cacheDir)
+            }
+            val videoPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
+                if (uri != null) scope.launch {
+                    sending = true
+                    try { if (model.sendVideo(route, uri, context.contentResolver, draft)) draft = "" } finally { sending = false }
+                }
+            }
+            if (canVoice) TextButton(onClick = {
+                val active = recorder
+                if (active != null) {
+                    recorder = null
+                    scope.launch { sending = true; try { active.finish()?.let { model.sendVoice(route, it) } } finally { sending = false } }
+                } else if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    recorder = VoiceRecorder.start(context.cacheDir)
+                } else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+            }, enabled = !sending, modifier = Modifier.padding(bottom = 24.dp).heightIn(min = 48.dp)
+                .semantics { contentDescription = if (recorder != null) "Aufnahme beenden und senden" else "Sprachnachricht aufnehmen" }) {
+                Text(if (recorder != null) "\u25A0 Senden" else "Sprache")
+            }
+            if (canVideo) TextButton(onClick = {
+                videoPicker.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.VideoOnly))
+            }, enabled = !sending, modifier = Modifier.padding(bottom = 24.dp).heightIn(min = 48.dp).semantics { contentDescription = "Video ohne Ortsdaten senden" }) { Text("Video") }
             if (canFile) TextButton(onClick = { filePicker.launch(arrayOf("*/*")) }, enabled = !sending,
                 modifier = Modifier.padding(bottom = 24.dp).heightIn(min = 48.dp).semantics { contentDescription = "Datei senden" }) { Text("Datei") }
             if (canImage) TextButton(onClick = {
                 picker.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
             }, enabled = !sending, modifier = Modifier.padding(bottom = 24.dp).heightIn(min = 48.dp).semantics { contentDescription = "Bild ohne Metadaten senden" }) { Text("Bild") }
-            OutlinedTextField(draft, { draft = it }, Modifier.weight(1f), label = { Text("Nachricht über ${if (snapshot.simulation) "Mock" else route.providerId.value}") }, shape = MaterialTheme.shapes.extraLarge, maxLines = 5, enabled = !sending,
+            OutlinedTextField(draft, { value ->
+                    if (value.isNotBlank() != draft.isNotBlank()) model.setTyping(route, value.isNotBlank())
+                    draft = value
+                }, Modifier.weight(1f), label = { Text("Nachricht über ${if (snapshot.simulation) "Mock" else route.providerId.value}") }, shape = MaterialTheme.shapes.extraLarge, maxLines = 5, enabled = !sending,
                 supportingText = {
                     val limit = textConstraints?.maxBytes
                     Text(if (limit == null) "${draft.length} Zeichen" else "${draft.toByteArray(Charsets.UTF_8).size}/$limit Byte")
@@ -371,6 +412,23 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
             }
         }
     }
+    deleteMineId?.let { pending ->
+        AlertDialog(onDismissRequest = { deleteMineId = null }, title = { Text("F\u00fcr mich l\u00f6schen?") },
+            text = { Text("Die Nachricht wird auf diesem Ger\u00e4t und deinen verkn\u00fcpften Ger\u00e4ten entfernt; andere sehen sie weiterhin.") },
+            confirmButton = { TextButton(onClick = { model.deleteForMe(MessageId(pending)); deleteMineId = null }) { Text("L\u00f6schen") } },
+            dismissButton = { TextButton(onClick = { deleteMineId = null }) { Text("Abbrechen") } })
+    }
+    if (renaming) {
+        var title by remember { mutableStateOf(route.conversation.title) }
+        AlertDialog(onDismissRequest = { renaming = false }, title = { Text("Gruppe umbenennen") },
+            text = { OutlinedTextField(title, { if (it.codePointCount(0, it.length) <= 32) title = it }, singleLine = true, label = { Text("Name (max. 32 Zeichen)") }) },
+            confirmButton = { TextButton(onClick = { scope.launch { if (model.renameGroup(route, title)) renaming = false } }, enabled = title.isNotBlank()) { Text("Speichern") } },
+            dismissButton = { TextButton(onClick = { renaming = false }) { Text("Abbrechen") } })
+    }
+    if (leaving) AlertDialog(onDismissRequest = { leaving = false }, title = { Text("Gruppe verlassen?") },
+        text = { Text("Du erh\u00e4ltst danach keine Nachrichten aus dieser Gruppe mehr. Zur\u00fcck kommst du nur mit einer neuen Einladung.") },
+        confirmButton = { TextButton(onClick = { scope.launch { if (model.leaveGroup(route)) { leaving = false; onBack() } } }) { Text("Verlassen") } },
+        dismissButton = { TextButton(onClick = { leaving = false }) { Text("Abbrechen") } })
     deleteId?.let { pendingDelete ->
         AlertDialog(onDismissRequest = { deleteId = null }, title = { Text("F\u00fcr alle l\u00f6schen?") },
             text = { Text("Signal ersetzt die Nachricht bei allen Empf\u00e4ngern durch einen L\u00f6schhinweis. Das l\u00e4sst sich nicht r\u00fcckg\u00e4ngig machen.") },
@@ -388,6 +446,10 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
             Text("Provider: ${route.providerId.value}\nKonto: ${snapshot.accounts.find { it.id == route.conversation.ref.accountId }?.displayName}\nVerschlüsselung: ${route.conversation.security.encryption}\nIdentitätsprüfung: ${route.conversation.security.verification}")
             Text(if (route.conversation.kind == ConversationKind.Group && route.conversation.participants.isEmpty()) "Gruppe · Mitgliederverwaltung im Companion" else "${route.conversation.participants.size} Identitäten · ${if (route.conversation.kind == ConversationKind.Group) "Gruppe" else "Direktchat"}")
             if (linked != null) FilledTonalButton(onClick = { details = false; onPerson(linked.personId.value) }) { Text("Person ansehen") }
+            val canRename by produceState(false, route, snapshot.syncNotice) { value = model.canRenameGroup(route) }
+            val canLeave by produceState(false, route, snapshot.syncNotice) { value = model.canLeaveGroup(route) }
+            if (canRename) OutlinedButton(onClick = { details = false; renaming = true }) { Text("Gruppe umbenennen") }
+            if (canLeave) OutlinedButton(onClick = { details = false; leaving = true }) { Text("Gruppe verlassen") }
         }
     }
 }
@@ -577,4 +639,27 @@ private fun FileAttachment(model: InboxViewModel, message: MessageId, attachment
             }
         }
     }, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) { Text(if (busy) "Lädt …" else "Datei speichern") }
+}
+
+/** AAC voice note recorded to a private cache file that is deleted right after reading. */
+internal class VoiceRecorder private constructor(private val file: java.io.File, private val recorder: android.media.MediaRecorder) {
+    companion object {
+        fun start(cache: java.io.File): VoiceRecorder? = try {
+            val file = java.io.File.createTempFile("orbiliq-voice", ".aac", cache)
+            @Suppress("DEPRECATION")
+            val recorder = android.media.MediaRecorder().apply {
+                setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
+                setOutputFormat(android.media.MediaRecorder.OutputFormat.AAC_ADTS)
+                setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
+                setAudioSamplingRate(44100); setAudioEncodingBitRate(64000)
+                setOutputFile(file.path); prepare(); start()
+            }
+            VoiceRecorder(file, recorder)
+        } catch (_: Exception) { null }
+    }
+    suspend fun finish(): ByteArray? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try { recorder.stop(); file.readBytes().takeIf { it.isNotEmpty() } } catch (_: Exception) { null }
+        finally { recorder.release(); file.delete() }
+    }
+    fun cancel() { try { recorder.stop() } catch (_: Exception) {} finally { recorder.release(); file.delete() } }
 }

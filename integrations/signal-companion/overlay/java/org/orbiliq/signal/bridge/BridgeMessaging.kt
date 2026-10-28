@@ -95,6 +95,11 @@ internal class BridgeMessaging(private val context: Context) {
               putBoolean("direct", !recipient.isGroup)
               putString("peer", identity(recipient))
               putBoolean("canSend", canSendNormal(recipient, record.threadId))
+              val group = if (recipient.isPushV2Group) SignalDatabase.groups.getGroup(recipient.id).orElse(null) else null
+              val admin = group?.memberLevel(Recipient.self()) == org.thoughtcrime.securesms.database.GroupTable.MemberLevel.ADMINISTRATOR
+              putBoolean("canRename", group != null && group.isActive && !group.isTerminated &&
+                (admin || group.attributesAccessControl == org.thoughtcrime.securesms.groups.GroupAccessControl.ALL_MEMBERS))
+              putBoolean("canLeave", group != null && group.isActive && !group.isTerminated)
             }
           }
         }
@@ -149,6 +154,12 @@ internal class BridgeMessaging(private val context: Context) {
       "messageImage" -> image(extras)
       "messageStageImage" -> stage(binding, extras)
       "messageDelete" -> remoteDelete(extras)
+      "messageDeleteLocal" -> localDelete(extras)
+      "messageUnreact" -> unreact(extras)
+      "messageRead" -> markRead(extras)
+      "messageTyping" -> typing(extras)
+      "groupRename" -> renameGroup(extras)
+      "groupLeave" -> leaveGroup(extras)
       else -> error("Unsupported bridge operation")
     }.apply { putInt("messageProtocolVersion", SignalMessagingContract.VERSION) }
   }
@@ -163,7 +174,13 @@ internal class BridgeMessaging(private val context: Context) {
     val chunk = requireNotNull(extras.getByteArray("chunk"))
     val fileType = extras.getString("fileType")
     val fileName = extras.getString("fileName")?.take(128)?.replace(Regex("[/\\\\:*?\"<>|\u0000-\u001f]"), "_")
-    require(fileType == null || (fileType.length in 3..128 && '/' in fileType && !fileType.startsWith("image/") && !fileType.startsWith("video/")))
+    val slide = extras.getString("slide") ?: "doc"
+    require(slide in setOf("doc", "voice", "video"))
+    require(fileType == null || (fileType.length in 3..128 && '/' in fileType && when (slide) {
+      "voice" -> fileType.startsWith("audio/")
+      "video" -> fileType == "video/mp4"
+      else -> !fileType.startsWith("image/") && !fileType.startsWith("video/")
+    }))
     require(total in 1..(if (fileType == null) SignalMessagingContract.MAX_IMAGE_BYTES else SignalMessagingContract.MAX_FILE_BYTES) &&
       chunk.size in 1..SignalMessagingContract.STAGE_CHUNK_BYTES)
     if (staging.size > 4 && token !in staging) staging.clear()
@@ -173,12 +190,13 @@ internal class BridgeMessaging(private val context: Context) {
     if (buffer.size().toLong() < total) return Bundle().apply { putString("result", "Partial") }
     val bytes = staging.remove(token)!!.toByteArray()
     if (fileType != null) {
-      val uri = org.thoughtcrime.securesms.dependencies.AppDependencies.blobs.forData(bytes).withMimeType(fileType)
+      val payload = if (slide == "video") remuxVideo(bytes).also { bytes.fill(0) } else bytes
+      val uri = org.thoughtcrime.securesms.dependencies.AppDependencies.blobs.forData(payload).withMimeType(fileType)
         .createForMultipleSessionsOnDisk(context)
       val ledger = Ledger(context, binding)
       val state = ledger.read()
-      state.put("staged:$token", JSONObject().put("uri", uri.toString()).put("size", bytes.size.toLong()).put("type", fileType)
-        .put("name", fileName ?: "Datei"))
+      state.put("staged:$token", JSONObject().put("uri", uri.toString()).put("size", payload.size.toLong()).put("type", fileType)
+        .put("name", fileName ?: "Datei").put("slide", slide))
       ledger.write(state)
       bytes.fill(0)
       return Bundle().apply { putString("result", "Staged") }
@@ -199,6 +217,117 @@ internal class BridgeMessaging(private val context: Context) {
     state.put("staged:$token", JSONObject().put("uri", uri.toString()).put("size", clean.size.toLong()).put("width", width).put("height", height))
     ledger.write(state)
     return Bundle().apply { putString("result", "Staged") }
+  }
+  private fun rejected() = Bundle().apply { putString("result", "Rejected") }
+  private fun queued(id: Long) = Bundle().apply { putString("result", "Queued"); putLong("messageId", id) }
+  /** Delete for me, synced to the user's other linked devices like the official client. */
+  private fun localDelete(extras: Bundle): Bundle {
+    val thread = extras.getLong("thread"); val id = extras.getLong("message")
+    require(thread > 0 && id > 0)
+    val message = SignalDatabase.messages.getMessageRecordOrNull(id) ?: return queued(id)
+    if (message.threadId != thread || !exportable(message)) return rejected()
+    SignalDatabase.messages.deleteMessage(id)
+    org.thoughtcrime.securesms.jobs.MultiDeviceDeleteSyncJob.enqueueMessageDeletes(setOf(message))
+    return queued(id)
+  }
+  private fun unreact(extras: Bundle): Bundle {
+    val thread = extras.getLong("thread"); val id = extras.getLong("message")
+    require(thread > 0 && id > 0)
+    val message = SignalDatabase.messages.getMessageRecordOrNull(id)
+    val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)
+    if (message == null || recipient == null || message.threadId != thread || !exportable(message) || !canSendNormal(recipient, thread)) return rejected()
+    val own = SignalDatabase.reactions.getReactions(MessageId(id)).find { it.author == Recipient.self().id } ?: return queued(id)
+    MessageSender.sendReactionRemoval(context, MessageId(id), own)
+    return queued(id)
+  }
+  /** Marks read up to a timestamp; receipts follow the user's Signal setting. Never in disappearing chats. */
+  private fun markRead(extras: Bundle): Bundle {
+    val thread = extras.getLong("thread"); val until = extras.getLong("until")
+    require(thread > 0 && until > 0)
+    val recipient = SignalDatabase.threads.getRecipientForThreadId(thread) ?: return rejected()
+    if (recipient.expiresInSeconds != 0) return rejected()
+    val infos = SignalDatabase.threads.setReadSince(org.thoughtcrime.securesms.notifications.v2.ConversationId.forConversation(thread), until)
+    org.thoughtcrime.securesms.dependencies.AppDependencies.messageNotifier.updateNotification(context)
+    org.thoughtcrime.securesms.notifications.MarkReadReceiver.process(infos)
+    return Bundle().apply { putString("result", "Queued") }
+  }
+  private fun typing(extras: Bundle): Bundle {
+    val thread = extras.getLong("thread")
+    require(thread > 0)
+    val recipient = SignalDatabase.threads.getRecipientForThreadId(thread) ?: return rejected()
+    if (!SignalStore.settings.isTypingIndicatorsEnabled || !canSendNormal(recipient, thread)) return rejected()
+    val sender = org.thoughtcrime.securesms.dependencies.AppDependencies.typingStatusSender
+    if (extras.getBoolean("active")) sender.onTypingStarted(thread) else sender.onTypingStoppedWithNotify(thread)
+    return Bundle().apply { putString("result", "Queued") }
+  }
+  private fun groupFor(thread: Long): Pair<Recipient, org.thoughtcrime.securesms.database.model.GroupRecord>? {
+    val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)?.takeIf { it.isPushV2Group } ?: return null
+    val group = SignalDatabase.groups.getGroup(recipient.id).orElse(null)?.takeIf { it.isActive && !it.isTerminated } ?: return null
+    return recipient to group
+  }
+  private fun renameGroup(extras: Bundle): Bundle {
+    val thread = extras.getLong("thread")
+    val title = requireNotNull(extras.getString("title")).trim()
+    require(thread > 0 && title.isNotEmpty() && title.codePointCount(0, title.length) <= 32)
+    val (_, group) = groupFor(thread) ?: return rejected()
+    return try {
+      org.thoughtcrime.securesms.groups.GroupManager.updateGroupDetails(context, group.id, null, false, title, true, group.description, false)
+      Bundle().apply { putString("result", "Queued") }
+    } catch (_: Exception) { rejected() }
+  }
+  private fun leaveGroup(extras: Bundle): Bundle {
+    val thread = extras.getLong("thread")
+    require(thread > 0)
+    val (_, group) = groupFor(thread) ?: return rejected()
+    return try {
+      org.thoughtcrime.securesms.groups.GroupManager.leaveGroup(context, group.id.requirePush(), true)
+      Bundle().apply { putString("result", "Queued") }
+    } catch (_: Exception) { rejected() }
+  }
+  /** Copies only audio/video tracks into a fresh MP4, so location and other container metadata are dropped. */
+  private fun remuxVideo(bytes: ByteArray): ByteArray {
+    val extractor = android.media.MediaExtractor()
+    val out = java.io.File(context.noBackupFilesDir, "orbiliq-remux-" + java.util.UUID.randomUUID() + ".mp4")
+    try {
+      extractor.setDataSource(object : android.media.MediaDataSource() {
+        override fun getSize() = bytes.size.toLong()
+        override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+          if (position >= bytes.size) return -1
+          val count = minOf(size.toLong(), bytes.size - position).toInt()
+          System.arraycopy(bytes, position.toInt(), buffer, offset, count); return count
+        }
+        override fun close() {}
+      })
+      val muxer = android.media.MediaMuxer(out.path, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+      val tracks = HashMap<Int, Int>()
+      var video = false
+      for (i in 0 until extractor.trackCount) {
+        val format = extractor.getTrackFormat(i)
+        val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: continue
+        if (mime.startsWith("video/") || mime.startsWith("audio/")) {
+          if (mime.startsWith("video/")) {
+            video = true
+            if (format.containsKey(android.media.MediaFormat.KEY_ROTATION)) muxer.setOrientationHint(format.getInteger(android.media.MediaFormat.KEY_ROTATION))
+          }
+          extractor.selectTrack(i); tracks[i] = muxer.addTrack(format)
+        }
+      }
+      check(video)
+      muxer.start()
+      val buffer = java.nio.ByteBuffer.allocate(4 * 1024 * 1024)
+      val info = android.media.MediaCodec.BufferInfo()
+      while (true) {
+        val size = extractor.readSampleData(buffer, 0)
+        if (size < 0) break
+        info.set(0, size, extractor.sampleTime, if (extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC != 0) android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+        muxer.writeSampleData(tracks.getValue(extractor.sampleTrackIndex), buffer, info)
+        extractor.advance()
+      }
+      muxer.stop(); muxer.release()
+      val clean = out.readBytes()
+      check(clean.size in 1..SignalMessagingContract.MAX_FILE_BYTES)
+      return clean
+    } finally { extractor.release(); out.delete() }
   }
   /** Delete for everyone with Signal's own time/ownership rules; repeating an applied delete is a no-op. */
   private fun remoteDelete(extras: Bundle): Bundle {
@@ -378,7 +507,9 @@ internal class BridgeMessaging(private val context: Context) {
     MessageSender.send(context, OutgoingMessage(threadRecipient = recipient, sentTimeMillis = timestamp, body = text, isSecure = true, outgoingQuote = quote, messageToEdit = edit,
       attachments = staged?.let {
         val uri = android.net.Uri.parse(it.getString("uri"))
-        listOf(if (it.has("type")) DocumentSlide(context, uri, it.getString("type"), it.getLong("size"), it.getString("name")).asAttachment()
+        listOf(if (it.optString("slide") == "voice") org.thoughtcrime.securesms.mms.AudioSlide(uri, it.getLong("size"), it.getString("type"), true).asAttachment()
+          else if (it.optString("slide") == "video") org.thoughtcrime.securesms.mms.VideoSlide(context, uri, it.getLong("size"), false).asAttachment()
+          else if (it.has("type")) DocumentSlide(context, uri, it.getString("type"), it.getLong("size"), it.getString("name")).asAttachment()
           else ImageSlide(context, uri, it.getLong("size"), it.getInt("width"), it.getInt("height"), null).asAttachment())
       }.orEmpty()),
       thread, MessageSender.SendType.SIGNAL, null, null)

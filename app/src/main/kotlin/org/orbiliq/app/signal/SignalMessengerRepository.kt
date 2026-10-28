@@ -104,6 +104,36 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
         if ((stored.content as? MessageContent.Media)?.attachments?.contains(attachment) != true) return@withContext null
         session?.image(ref, attachment)
     }
+    private fun current(route: SendRoute) = session?.takeIf { route.conversation.ref.accountId == account.value && it.accountId == route.conversation.ref.accountId }
+    private suspend fun ref(message: MessageId): MessageRef? {
+        val active = account.value ?: return null
+        return ready.await().snapshot().messages.find { it.id == message && it.route.accountId == active }?.ref
+    }
+    override suspend fun markRead(route: SendRoute, until: java.time.Instant) = withContext(Dispatchers.IO) { current(route)?.markRead(route.conversation.ref, until) == true }
+    override suspend fun setTyping(route: SendRoute, active: Boolean) = withContext(Dispatchers.IO) { current(route)?.typing(route.conversation.ref, active) == true }
+    override suspend fun removeReaction(message: MessageId) = withContext(Dispatchers.IO) { ref(message)?.let { session?.removeReaction(it) } == true }
+    override suspend fun canDeleteForMe(message: MessageId) = withContext(Dispatchers.IO) { owned(message) && communication().canDeleteForMe(message) }
+    override suspend fun deleteForMe(message: MessageId) = withContext(Dispatchers.IO) { owned(message) && communication().deleteForMe(message) }
+    private suspend fun allows(route: SendRoute, operation: OperationKey) = current(route)?.evaluate(
+        OperationRequest(CapabilityScope.Conversation(route.providerId, route.conversation.ref), operation)) is Availability.Available
+    override suspend fun canRenameGroup(route: SendRoute) = withContext(Dispatchers.IO) { allows(route, SignalMessagingSession.GroupRename) }
+    override suspend fun renameGroup(route: SendRoute, title: String) = withContext(Dispatchers.IO) { current(route)?.renameGroup(route.conversation.ref, title) == true }
+    override suspend fun canLeaveGroup(route: SendRoute) = withContext(Dispatchers.IO) { allows(route, SignalMessagingSession.GroupLeave) }
+    override suspend fun leaveGroup(route: SendRoute) = withContext(Dispatchers.IO) { current(route)?.leaveGroup(route.conversation.ref) == true }
+    override suspend fun canSendMedia(route: SendRoute, kind: AttachmentKind) = withContext(Dispatchers.IO) {
+        current(route) != null && communication().mediaAvailability(route, null, kind) is Availability.Available
+    }
+    override suspend fun sendMedia(target: ConversationTarget, route: SendRoute, kind: AttachmentKind, bytes: ByteArray, mimeType: String, caption: String?) = withContext(Dispatchers.IO) {
+        val session = current(route) ?: return@withContext SendTextResult.Unavailable(Availability.Unknown)
+        if (communication().mediaAvailability(route, caption, kind) !is Availability.Available)
+            return@withContext SendTextResult.Unavailable(Availability.Restricted(Restriction.Policy))
+        val staged = when (kind) {
+            AttachmentKind.VoiceNote -> session.stageVoice(bytes, mimeType)
+            AttachmentKind.Video -> if (mimeType == "video/mp4") session.stageVideo(bytes) else null
+            else -> null
+        } ?: return@withContext SendTextResult.Unavailable(Availability.Restricted(Restriction.Policy))
+        communication().sendStaged(target, route, staged, kind, caption)
+    }
     private suspend fun owned(message: MessageId): Boolean {
         val active = account.value ?: return false
         return ready.await().snapshot().messages.any { it.id == message && it.route.accountId == active }

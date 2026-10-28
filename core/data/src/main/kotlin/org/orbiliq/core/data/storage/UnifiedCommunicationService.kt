@@ -73,6 +73,11 @@ class UnifiedCommunicationService(
         val (session, scope) = allowed(message, Operations.EditText, text) ?: return false
         return enqueueFor(session, scope, CommandPayload.EditText(scope.ref, text, null))
     }
+    override suspend fun canDeleteForMe(message: MessageId) = allowed(message, Operations.DeleteSelf) != null
+    override suspend fun deleteForMe(message: MessageId): Boolean {
+        val (session, scope) = allowed(message, Operations.DeleteSelf) ?: return false
+        return enqueueFor(session, scope, CommandPayload.Delete(scope.ref, forEveryone = false))
+    }
     override suspend fun canDeleteForEveryone(message: MessageId) = allowed(message, Operations.DeleteAll) != null
     override suspend fun deleteForEveryone(message: MessageId): Boolean {
         val (session, scope) = allowed(message, Operations.DeleteAll) ?: return false

@@ -34,6 +34,20 @@ interface UnifiedCommunication {
     suspend fun react(message: MessageId, emoji: String): Boolean = false
     /** Image bytes for display only (never persisted by Orbiliq); null when unavailable. */
     suspend fun loadImage(message: MessageId, attachment: AttachmentId): ByteArray? = null
+    /** Marks [route] read up to [until]; providers honour the user's receipt settings. */
+    suspend fun markRead(route: SendRoute, until: java.time.Instant): Boolean = false
+    suspend fun setTyping(route: SendRoute, active: Boolean): Boolean = false
+    suspend fun removeReaction(message: MessageId): Boolean = false
+    suspend fun canDeleteForMe(message: MessageId): Boolean = false
+    suspend fun deleteForMe(message: MessageId): Boolean = false
+    suspend fun canRenameGroup(route: SendRoute): Boolean = false
+    suspend fun renameGroup(route: SendRoute, title: String): Boolean = false
+    suspend fun canLeaveGroup(route: SendRoute): Boolean = false
+    suspend fun leaveGroup(route: SendRoute): Boolean = false
+    suspend fun canSendMedia(route: SendRoute, kind: AttachmentKind): Boolean = false
+    /** Voice notes (audio) and MP4 videos; videos are remuxed by the provider to drop container metadata. */
+    suspend fun sendMedia(target: ConversationTarget, route: SendRoute, kind: AttachmentKind, bytes: ByteArray, mimeType: String, caption: String?): SendTextResult =
+        SendTextResult.Unavailable(Availability.Unsupported("media.unsupported"))
     /** Own message the provider currently allows to edit (provider-specific time/ownership rules). */
     suspend fun canEdit(message: MessageId): Boolean = false
     suspend fun edit(message: MessageId, text: String): Boolean = false

@@ -49,8 +49,15 @@ class SignalMessagingTest {
             return row.files.find { it.id == attachment }?.let { it.mimeType to byteArrayOf(4, 5) }
         }
         val stagedFiles = mutableMapOf<String, String>()
-        override suspend fun stageFile(binding: SignalBinding, token: String, bytes: ByteArray, mimeType: String, name: String?): Boolean {
-            stagedFiles[token] = mimeType; return true
+        val slides = mutableMapOf<String, String>()
+        override suspend fun stageFile(binding: SignalBinding, token: String, bytes: ByteArray, mimeType: String, name: String?, slide: String): Boolean {
+            stagedFiles[token] = mimeType; slides[token] = slide; return true
+        }
+        val actions = mutableListOf<Pair<String, Map<String, Any>>>()
+        override suspend fun action(binding: SignalBinding, method: String, extras: Map<String, Any>): SignalSendResult {
+            actions += method to extras
+            if (method == "messageDeleteLocal") rows.remove(extras["message"] as Long)
+            return SignalSendResult.Queued((extras["message"] as? Long) ?: 1L)
         }
         var reactCalls = 0
         override suspend fun react(binding: SignalBinding, thread: Long, message: Long, emoji: String): SignalSendResult {
@@ -86,7 +93,9 @@ class SignalMessagingTest {
         running(Peer(binding)) { session, _ ->
             val caps = session.observeCapabilities(scope(session)).first()
             assertEquals(setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive,
-                SignalMessagingSession.FileReceive, Operations.sendMedia(AttachmentKind.File)), caps.operations.keys)
+                SignalMessagingSession.FileReceive, Operations.sendMedia(AttachmentKind.File), SignalMessagingSession.ReactionRemove,
+                Operations.ReadReceipt, Operations.Typing, SignalMessagingSession.GroupRename, SignalMessagingSession.GroupLeave,
+                Operations.sendMedia(AttachmentKind.VoiceNote), Operations.sendMedia(AttachmentKind.Video)), caps.operations.keys)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.React)) is Availability.Available)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4001)) is Availability.Restricted)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2, sizeBytes = 2)) is Availability.Available)
@@ -322,10 +331,46 @@ class SignalMessagingTest {
             assertTrue(session.execute(command(session, CommandPayload.EditText(theirs, "new", null))) is DispatchResult.Rejected)
             assertTrue(session.execute(command(session, CommandPayload.EditText(mine, "new", null))) is DispatchResult.Accepted)
             assertEquals(11L, peer.lastEdit)
-            assertTrue(session.execute(command(session, CommandPayload.Delete(mine, forEveryone = false))) is DispatchResult.Rejected)
+            assertTrue(session.execute(command(session, CommandPayload.Delete(theirs, forEveryone = false))) is DispatchResult.Accepted)
             val deleting = command(session, CommandPayload.Delete(mine, forEveryone = true))
             val accepted = session.execute(deleting) as DispatchResult.Accepted
             assertTrue(session.reconcile(ReconcileRequest(deleting.id, deleting.route, accepted.receipt)) is ReconcileResult.Confirmed)
+        }
+    }
+    @Test fun readTypingUnreactAndDeleteForMeReachTheCompanionOnlyWhenOffered() = runBlocking {
+        val peer = Peer(binding).apply { rows[11] = text() }
+        running(peer) { session, _ ->
+            val chat = scope(session).ref
+            val ref = MessageRef(chat, "11")
+            assertTrue(session.markRead(chat, now))
+            assertTrue(session.typing(chat, true))
+            assertTrue(session.removeReaction(ref))
+            assertFalse(session.markRead(ConversationRef(AccountId("other"), "7"), now))
+            assertEquals(listOf("messageRead", "messageTyping", "messageUnreact"), peer.actions.map { it.first })
+            val deleting = command(session, CommandPayload.Delete(ref, forEveryone = false))
+            val accepted = session.execute(deleting) as DispatchResult.Accepted
+            assertTrue(session.reconcile(ReconcileRequest(deleting.id, deleting.route, accepted.receipt)) is ReconcileResult.Confirmed)
+        }
+    }
+    @Test fun groupManagementFollowsTheCompanionsRights() = runBlocking {
+        val peer = Peer(binding).apply { threadRows = listOf(SignalThread(7, "Group", false, true, "9", canRename = false, canLeave = true)) }
+        running(peer) { session, _ ->
+            assertFalse(session.renameGroup(scope(session).ref, "Neu"))
+            assertTrue(session.leaveGroup(scope(session).ref))
+            assertEquals(listOf("groupLeave"), peer.actions.map { it.first })
+        }
+    }
+    @Test fun voiceAndVideoUseTheirOwnSlidesAndValidateTypes() = runBlocking {
+        val peer = Peer(binding)
+        running(peer) { session, _ ->
+            assertNull(session.stageVoice(byteArrayOf(1), "application/pdf"))
+            val voice = requireNotNull(session.stageVoice(byteArrayOf(1), "audio/aac"))
+            val video = requireNotNull(session.stageVideo(byteArrayOf(1)))
+            assertEquals(setOf("voice", "video"), peer.slides.values.toSet())
+            assertEquals(AttachmentKind.VoiceNote, SignalMessagingSession.kindOf(voice))
+            assertTrue(session.execute(command(session, CommandPayload.SendMedia(voice, AttachmentKind.VoiceNote))) is DispatchResult.Accepted)
+            assertTrue(session.execute(command(session, CommandPayload.SendMedia(video, AttachmentKind.Video))) is DispatchResult.Accepted)
+            assertTrue(session.execute(command(session, CommandPayload.SendMedia(video, AttachmentKind.VoiceNote))) is DispatchResult.Rejected)
         }
     }
     @Test fun imageContractRejectsUnsupportedTypesAndOversize() {

@@ -19,7 +19,7 @@ class BridgeProvider : ContentProvider() {
     val ctx = requireNotNull(context)
     val access = BridgeAccess(ctx)
     access.enforceCaller()
-    if (method in setOf("messageSession", "messageThreads", "messageTexts", "messageLookup", "messageSend", "messageReconcile", "messageReact", "messageImage", "messageStageImage", "messageDelete")) {
+    if (method in setOf("messageSession", "messageThreads", "messageTexts", "messageLookup", "messageSend", "messageReconcile", "messageReact", "messageImage", "messageStageImage", "messageDelete", "messageDeleteLocal", "messageUnreact", "messageRead", "messageTyping", "groupRename", "groupLeave")) {
       return try { BridgeMessaging(ctx).call(method, requireNotNull(extras)) }
       catch (_: Exception) { Bundle().apply { putString("error", "Unavailable") } }
     }
