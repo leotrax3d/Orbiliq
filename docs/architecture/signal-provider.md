@@ -82,13 +82,19 @@ Freigegebene Capabilities (Stand `586a3c2`), jeweils nur, wenn die Strecke imple
 | `signal.file.receive` | Sprachnachricht, Audio, Video, Dokument bis 64 MiB; Wiedergabe aus dem Speicher, Speichern nur an vom Nutzer gewählten Ort |
 | `message.media.file.send` | Dokumente unverändert (Bilder/Videos auf diesem Weg abgelehnt) |
 | `message.text.edit`, `message.remote.deleteAll` | eigene Nachrichten, Regeln/Fristen aus Signals `MessageConstraintsUtil`, vom Companion je Nachricht geprüft |
+| `message.remote.deleteSelf` | „Für mich löschen“, mit Signals Löschsync an eigene verknüpfte Geräte |
+| `reaction.remove` | eigene Reaktion entfernen |
+| `receipt.read.send`, `typing.send` | folgen den Signal-Einstellungen des Nutzers; Lesemarkierung nie in Chats mit Ablauftimer |
+| `message.media.voicenote.send` | in Orbiliq aufgenommene AAC-Sprachnachricht (Mikrofon nur auf Tippen, Temp-Datei sofort gelöscht) |
+| `message.media.video.send` | MP4 bis 64 MiB, im Companion neu gemuxt (nur Audio/Video-Spuren) – Ortsdaten entfallen, auf Hardware geprüft |
+| `group.rename`, `group.leave` | über `GroupManager` mit den offiziellen Rechten (Attribut-Rechte, aktive Mitgliedschaft) |
 
 Senden (Text, Antwort, Reaktion, Bild) gilt für Direktchats und für Gruppen, in denen das
 offizielle Eingabefeld schreiben ließe: aktive v2-Gruppe, Voll-/Adminmitglied,
 Ankündigungsgruppen nur für Admins, ohne Ablauftimer.
 
-Nicht freigegeben: Gruppenverwaltung, Video-Versand (Metadaten nicht sicher
-entfernbar), Aufnahme von Sprachnachrichten, Löschen nur für mich, Reaktion entfernen, Typing, Read-Receipt-Versand, Suche, Calls, Stories,
+Nicht freigegeben: weitere Gruppenverwaltung (Mitglieder hinzufügen/entfernen, Admins,
+Beschreibung, Avatar, Gruppe erstellen), Typing-Anzeige anderer empfangen, Read-Receipt-Versand, Suche, Calls, Stories,
 View-once und verschwindende Inhalte (bleiben nativ). Diese Liste beschreibt die
 implementierte Adapterstrecke, nicht alle Fähigkeiten des nativen Clients.
 

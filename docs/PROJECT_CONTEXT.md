@@ -2,7 +2,14 @@
 
 Stand: 28. Oktober 2026.
 
-**Prompt-11-Stand `b555ee0`+ (Kernfunktionen erfüllt, Restnachweise offen):** Zusätzlich zu den
+**Prompt-11-Stand `c0007e3`+:** Zusätzlich Lesebestätigungen und Tippanzeige senden (nach
+Signal-Einstellungen), Reaktion entfernen, „für mich löschen“, Sprachnachrichten aufnehmen,
+Video senden ohne Ortsdaten (Remux im Companion), Gruppe umbenennen/verlassen. Hardware:
+13 Gerätetests bestanden (44,2 s), darunter ein synthetisches MP4 mit GPS-Ort, das ohne
+Ort zurückkommt; Gruppenumbenennen/-verlassen nicht auf Hardware (betrifft Dritte).
+Lokal 160 JVM-Tests, Lint 0 Fehler/11 Warnungen.
+
+**Stand `b555ee0` (Kernfunktionen erfüllt, Restnachweise offen):** Zusätzlich zu den
 unten genannten Funktionen: Gruppen schreiben (Regeln des offiziellen Eingabefelds),
 Sprachnachrichten/Audio/Video/Dokumente empfangen, Dokumente senden, eigene Nachrichten
 bearbeiten und für alle löschen, Einrichtung mit nur einem Handy per geteiltem QR-Code.
@@ -13,8 +20,8 @@ Lokal: 112 JVM-Tests, 14 Generator-Tests, Lint 0 Fehler/11 Warnungen. Companion 
 auf dem Entwicklungsrechner in ~5 min gebaut (`prepare.py --source-cache`, 32 Worker).
 Offen und nicht als bestanden behauptet: Empfang von fremden Geräten, Gruppenversand auf
 Hardware (erreicht Dritte), Offline/Netzwechsel (ADB läuft über WLAN), Doze/Hintergrund,
-Widerruf auf Hardware; nicht implementiert: Video-Versand, Sprachaufnahme, Reaktion
-entfernen, Löschen nur für mich, Gruppenverwaltung, Typing/Lesebestätigung senden.
+Widerruf auf Hardware; nicht implementiert (Stand später ergänzt, siehe oben): Mitglieder-/Admin-
+verwaltung, Gruppe erstellen, fremde Tippanzeige empfangen.
 
 **Vorheriger Stand `586a3c2`:** Signal-Direktchats unterstützen Textempfang/-versand,
 Zitat-Antworten, eigene Reaktionen, Bildempfang und metadatenfreien Bildversand;
