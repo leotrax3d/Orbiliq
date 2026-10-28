@@ -2,6 +2,17 @@
 
 Stand: 27. Oktober 2026.
 
+Nachtrag 28.10.2026: Fortsetzung von Prompt 11 auf Basis des Branches
+`codex/signal-provider-tests`. Zusätzliche Linking-Sperren für wiederhergestellte
+Registrierungszustände, Start-fresh und Rückwärtsnavigation; sieben Generator-Tests
+gegen die feste Upstream-Revision und zehn Signal-Provider-JVM-Tests lokal bestanden.
+Generierte Security-Dateien werden vor lokalem Build und in CI auf Konsistenz geprüft;
+alte Quellbäume müssen neu erzeugt werden. Windows-Checkout verwendet lokal
+`core.longpaths=true`. Recherche erneut geprüft: Signal Android/Molly unverändert,
+libsignal/signal-cli fortgeschritten; Client-Kryptodependencies unverändert beibehalten.
+Kein neuer APK-/Account-/Linkingnachweis. Signal bleibt Setup/Status ohne Messaging-
+Capabilities; Prompt 11 und seine Definition of Done sind weiterhin offen.
+
 ## Produkt und verbindlicher Rahmen
 
 Orbiliq ist als lokale, datenschutzorientierte Unified-Messenger-App für Android geplant. Kotlin, Jetpack Compose, Material 3 Expressive, Coroutines/Flow und eine modulare Providerarchitektur sind vorgegeben. Eigener Projektcode soll MIT-lizenziert sein. Veröffentlichung zunächst über GitHub Releases. Keine verpflichtenden Google Play Services, keine obligatorische Orbiliq-Cloud, keine Tracker oder Werbe-SDKs.

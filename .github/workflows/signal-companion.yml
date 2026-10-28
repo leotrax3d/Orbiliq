@@ -27,6 +27,8 @@ jobs:
         run: |
           sdkmanager "platforms;android-37.0" "build-tools;36.0.0" "ndk;28.0.13004108"
           python3 integrations/signal-companion/prepare.py
+          SIGNAL_UPSTREAM_SOURCE="$PWD/build/signal-companion/source" python3 -m unittest discover -s integrations/signal-companion -p test_prepare.py -v
+          python3 -c "import sys; from pathlib import Path; sys.path.insert(0, 'integrations/signal-companion'); from prepare import verify_security_manifest; verify_security_manifest(Path('build/signal-companion/source'))"
           mkdir -p "$HOME/.android"
           keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -keypass android -alias AndroidDebugKey -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 30
       - name: Verify primary registration is blocked without network

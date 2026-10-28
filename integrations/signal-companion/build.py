@@ -7,7 +7,7 @@ import re
 import subprocess
 import xml.etree.ElementTree as ET
 
-from prepare import REVISION, ROOT
+from prepare import REVISION, ROOT, verify_security_manifest
 
 
 def main():
@@ -22,6 +22,10 @@ def main():
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
     if revision != REVISION:
         parser.error("Prepared source has an unexpected upstream revision")
+    try:
+        verify_security_manifest(source)
+    except (OSError, ValueError, RuntimeError):
+        parser.error("Companion security generation is stale or modified; regenerate source")
     for name in ("authenticator.xml", "syncadapter.xml"):
         xml = ET.parse(source / "app/src/main/res/xml" / name).getroot()
         if xml.get("{http://schemas.android.com/apk/res/android}accountType") != "org.orbiliq.signal.companion":

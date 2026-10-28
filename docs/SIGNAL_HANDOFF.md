@@ -2,6 +2,28 @@
 
 Stand: 28.10.2026. Prompt 11 ist **nicht abgeschlossen**.
 
+## Fortsetzung im neuen Workspace am 28.10.2026
+
+- Aktiver Arbeitsbranch: `codex/signal-completion`, auf Basis von
+  `origin/codex/signal-provider-tests`; `main` enthält den Signal-Zwischenstand nicht.
+- CI 40668223010 erfolgreich. Artefakte liegen lokal unter
+  `build/artifacts/run-40668223010`; keine Installation, kein Resigning und keine
+  Änderung von Gerätedaten in dieser Fortsetzung vorgenommen.
+- Weitere UI-Lücken gefunden und im Generator geschlossen: asynchroner Restore
+  (vor Session-Netzwerkvalidierung), leere/alte SavedState-Stacks, Start-fresh und
+  NavigateBackToScreen. Primärregistrierung bleibt an beiden HTTP-APIs blockiert.
+- Frischer Quellbaum `build/signal-companion/source-v2` erfolgreich erzeugt.
+  `ORBILIQ-SECURITY.json` Generation 2 erfasst die Security-Dateihashes;
+  `build.py` lehnt alte/abweichende Generationen ab. Das ist eine Konsistenzprüfung,
+  keine Signatur oder Sicherheitszertifizierung. CI prüft sie ebenfalls.
+- Sieben Python-Tests sowie zehn vorhandene Signal-JVM-Tests lokal bestanden.
+  Kein neuer Companion-APK-Build und keine Hardwaretests bestanden/behauptet.
+- Handy vom Nutzer angeschlossen. ADB 37.0.0 sah das Gerät zunächst als offline,
+  nach Neustart wechselnd offline/fehlend; Windows erkennt Pixel 10a als WPD.
+  Nutzer erhielt Schritte zum erneuten USB-Debugging und zur Computerfreigabe.
+  Auf eine nutzbare ADB-Verbindung warten, keine Kontodaten zurücksetzen.
+- Neue Recherchebelege stehen in `research/08-signal-revalidation.md`.
+
 ## Aktueller Zustand
 
 - Separater Signal-Android-Companion, feste Revision `6e9dddc01f1b26e608ac683807c51e139c141ed2`.

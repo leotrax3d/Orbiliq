@@ -169,3 +169,24 @@ Ein bereits als Primärgerät registrierter Companion wird dadurch nicht automat
 entkoppelt, gelöscht oder zum Sekundärgerät umgewandelt. Zuerst muss der Nutzer den
 Status seines ursprünglichen Signal-Accounts klären. Kein erneuter Accounttest mit
 dem ersten APK-Build.
+# Ergänzung zur Sicherheitsgeneration 2 (28.10.2026)
+
+Alte generierte Quellbäume vor dem nächsten Build neu erzeugen. Generation 2 sperrt
+zusätzlich asynchrone Registrierung-Wiederherstellung, leere SavedState-Stacks,
+Start-fresh und Rückwärtsnavigation zum Primäraccount-Login. Die Sperre beider
+primären HTTP-Registrierungswege bleibt bestehen. `build.py` prüft die erzeugte
+Datei `ORBILIQ-SECURITY.json` und lehnt alte oder nachträglich geänderte Security-Dateien
+ab. Diese Hashprüfung prüft Konsistenz, keine Herkunft; Review und APK-Signatur bleiben
+erforderlich. CI führt dieselbe Prüfung aus.
+
+Credentialfreie Generator-Integrationstests (Python-Standardbibliothek):
+
+```sh
+SIGNAL_UPSTREAM_SOURCE=/path/to/pinned/signal-checkout python3 -m unittest discover -s integrations/signal-companion -p test_prepare.py -v
+```
+
+Die Tests lesen Originaldateien mit `git show` aus der festen Revision, verändern den
+Upstream-Checkout nicht und brauchen weder Netzwerkverkehr zu Signal noch Credentials.
+Ohne `SIGNAL_UPSTREAM_SOURCE` werden die vier Upstreamtests ausdrücklich übersprungen;
+die drei Manifesttests laufen weiterhin. CI setzt den Pfad und führt alle sieben aus.
+Die Tests ersetzen keinen Linking-, Session-, Sync- oder Nachrichten-Gerätetest.

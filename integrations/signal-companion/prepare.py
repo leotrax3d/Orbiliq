@@ -5,6 +5,8 @@ The generated tree keeps upstream Git history, license, source and dependency ve
 It is a research build, not an audited release or a complete messaging integration.
 """
 import argparse
+import hashlib
+import json
 import re
 from pathlib import Path
 import shutil
@@ -17,6 +19,29 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 TOOLS = "{http://schemas.android.com/tools}"
+SECURITY_FILES = (
+    "app/src/main/AndroidManifest.xml",
+    "app/src/main/res/xml/authenticator.xml",
+    "app/src/main/res/xml/syncadapter.xml",
+    "feature/registration/src/main/java/org/signal/registration/RegistrationActivity.kt",
+    "feature/registration/src/main/java/org/signal/registration/RegistrationViewModel.kt",
+    "feature/registration/src/main/java/org/signal/registration/CompanionRegistrationPolicy.kt",
+    "lib/network/src/main/java/org/signal/network/api/RegistrationApiV2.kt",
+    "lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/registration/RegistrationApi.kt",
+)
+
+
+def verify_security_manifest(checkout: Path):
+    """Reject stale/partially patched source, including old linking guards.
+
+    This is a consistency check, not a substitute for code review or APK signing.
+    """
+    manifest = json.loads((checkout / "ORBILIQ-SECURITY.json").read_text())
+    if manifest.get("version") != 2 or manifest.get("revision") != REVISION:
+        raise RuntimeError("Regenerate companion source: obsolete security generation")
+    expected = {name: hashlib.sha256((checkout / name).read_bytes()).hexdigest() for name in SECURITY_FILES}
+    if manifest.get("files") != expected:
+        raise RuntimeError("Regenerate companion source: security files changed")
 
 
 def run(*args, cwd=None):
@@ -53,7 +78,7 @@ def block_primary_registration(checkout: Path):
     text = viewmodel.read_text()
     old = "  init {\n    if (startDestination != null) {"
     new = """  init {
-    if (_state.value.backStack.any { !CompanionRegistrationPolicy.allows(it) }) {
+    if (_state.value.backStack.isEmpty() || _state.value.backStack.any { !CompanionRegistrationPolicy.allows(it) } || _state.value.sessionMetadata != null) {
       _state.value = RegistrationFlowState(backStack = listOf(RegistrationRoute.LinkAccount(showCreateAccount = false)), isRestoringNavigationState = false)
     }
     if (startDestination != null) {"""
@@ -64,6 +89,23 @@ def block_primary_registration(checkout: Path):
     if text.count(old) != 1:
         raise RuntimeError("Upstream registration navigation changed")
     text = text.replace(old, old + "    if (!CompanionRegistrationPolicy.allows(event.route)) return inputState\n")
+    old = "  private fun applyNavigateBackToScreenEvent(inputState: RegistrationFlowState, event: RegistrationFlowEvent.NavigateBackToScreen): RegistrationFlowState {\n"
+    if text.count(old) != 1:
+        raise RuntimeError("Upstream registration back navigation changed")
+    text = text.replace(old, old + "    if (!CompanionRegistrationPolicy.allows(event.route)) return inputState\n")
+    # Persisted flow state is loaded asynchronously after init. Guard it BEFORE
+    # validateRestoredState can issue any legacy verification-session request.
+    old = "  private suspend fun validateRestoredState(state: RegistrationFlowState): RegistrationFlowState {\n"
+    if text.count(old) != 1:
+        raise RuntimeError("Upstream registration restoration validation changed")
+    text = text.replace(old, old + """    if (state.backStack.isEmpty() || state.backStack.any { !CompanionRegistrationPolicy.allows(it) } || state.sessionMetadata != null) {
+      return RegistrationFlowState(backStack = listOf(RegistrationRoute.LinkAccount(showCreateAccount = false)), isRestoringNavigationState = false)
+    }
+""")
+    old = "          _state.value = RegistrationFlowState(\n            preExistingRegistrationData = repository.getPreExistingRegistrationData(),"
+    if text.count(old) != 1:
+        raise RuntimeError("Upstream fresh registration state changed")
+    text = text.replace(old, "          _state.value = RegistrationFlowState(\n            backStack = listOf(RegistrationRoute.LinkAccount(showCreateAccount = false)),\n            preExistingRegistrationData = repository.getPreExistingRegistrationData(),")
     text = text.replace("is RegistrationFlowEvent.ResetState -> RegistrationFlowState(isRestoringNavigationState = false)",
                         "is RegistrationFlowEvent.ResetState -> RegistrationFlowState(backStack = listOf(RegistrationRoute.LinkAccount(showCreateAccount = false)), isRestoringNavigationState = false)")
     viewmodel.write_text(text)
@@ -191,6 +233,10 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
         "Status/linking only; no Orbiliq message transport. Not account-tested.\n"
     )
     shutil.copyfile(ROOT / "LICENSE", checkout / "ORBILIQ-MIT-LICENSE")
+    (checkout / "ORBILIQ-SECURITY.json").write_text(json.dumps({
+        "version": 2, "revision": REVISION,
+        "files": {name: hashlib.sha256((checkout / name).read_bytes()).hexdigest() for name in SECURITY_FILES},
+    }, indent=2) + "\n")
 
 
 def main():
@@ -208,7 +254,9 @@ def main():
         run("git", "init", str(dest))
         run("git", "remote", "add", "origin", REPOSITORY, cwd=dest)
         run("git", "fetch", "--depth=1", "origin", REVISION, cwd=dest)
-    run("git", "checkout", "--detach", REVISION, cwd=dest)
+    # Upstream screenshot fixture paths exceed MAX_PATH on Windows. Keep the
+    # setting local to this invocation, without changing the user's Git config.
+    run("git", "-c", "core.longpaths=true", "checkout", "--detach", REVISION, cwd=dest)
     configure(dest)
     print(f"Prepared separate AGPL companion source: {dest}")
     print("Set sdk.dir in its local.properties, then use JDK 21:")

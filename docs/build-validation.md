@@ -577,3 +577,28 @@ Der korrigierte Companion-Lauf 40668223010 hat den Schritt
 `Verify primary registration is blocked without network` erfolgreich abgeschlossen
 (vier Boundarytests). Anschließend ist der korrigierte APK-Build gestartet.
 Das ist noch kein erfolgreiches Device Linking.
+# Fortsetzung Signal am 28.10.2026 im neuen Windows-Workspace
+
+Ausgangspunkt: `origin/codex/signal-provider-tests`; Arbeitsbranch
+`codex/signal-completion`. Vorhandener Companion-CI-Lauf 40668223010 über `gh run view`
+als success bestätigt, Artefakte heruntergeladen. Kein Installationsnachweis daraus
+abgeleitet. Neue Änderungen sind in diesem alten APK nicht enthalten.
+
+- `SIGNAL_UPSTREAM_SOURCE=<lokaler pinned Git-Checkout> python -m unittest discover
+  -s integrations/signal-companion -p test_prepare.py -v`: **7 Tests bestanden**,
+  keine übersprungen. Vier Tests extrahieren Originaldateien aus dem festen
+  Signal-Commit und prüfen tatsächliche Generatorpatches einschließlich Restore,
+  Back-Navigation, HTTP-Blockade, erhaltenem Secondary-Device-Einstieg und Driftfehler.
+  Drei Tests prüfen die Security-Manifestkonsistenz. Keine echten Credentials.
+- `prepare.py --source-cache build/signal-companion/source --output
+  build/signal-companion/source-v2`: erfolgreich. Der erste Checkout ohne
+  `core.longpaths=true` hatte Windows-Pfadlängenfehler bei Screenshotfixtures;
+  der neue Generator vermeidet diese im frischen Checkout.
+- `gradlew.bat --no-daemon --max-workers=1
+  -Dorg.gradle.jvmargs="-Xmx2g -XX:ActiveProcessorCount=2"
+  :core:provider-signal:test`: **BUILD SUCCESSFUL**, XML: 10 Tests, 0 Fehler,
+  0 Fehlschläge, 0 übersprungen. Zunächst fehlte JDK 17; nach lokalem Download
+  eines Temurin-17-JDKs mit Abgleich gegen den veröffentlichten SHA-256 bestanden.
+- Kein neuer Companion-APK-Build, keine Instrumentationstests, kein Accounttest.
+  Das vom Nutzer angeschlossene Gerät ist für ADB bislang offline/fehlend.
+  Keine QR-Daten, Schlüssel oder Nachrichten erfasst. Keine Signal-Appdaten verändert.

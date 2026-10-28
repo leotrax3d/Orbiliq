@@ -2,6 +2,36 @@
 
 Stand: 27.10.2026. **Recherche aktualisiert, Implementierungsauftrag nicht abgeschlossen.**
 
+## Nachprüfung am 28.10.2026
+
+Erneute `git ls-remote ... HEAD`-Abfragen: Signal Android bleibt auf
+`6e9dddc01f1b26e608ac683807c51e139c141ed2`, Molly auf
+`892d6264ba007b5458a8b74cf9183c665f1f17a1`. Dagegen steht
+[signal-cli](https://github.com/AsamK/signal-cli/tree/1e878f38457d22adb55d9b08b7f58543fdb92318)
+jetzt auf `1e878f38457d22adb55d9b08b7f58543fdb92318` und
+[libsignal](https://github.com/signalapp/libsignal/tree/904c8dc8216073b078a5f2f5090e3da8382e6a92)
+auf `904c8dc8216073b078a5f2f5090e3da8382e6a92`.
+Der [libsignal-Vergleich](https://github.com/signalapp/libsignal/compare/fc90b90fa2b9c37822fa47ba0e0dcdf387a0c071...904c8dc8216073b078a5f2f5090e3da8382e6a92)
+enthält sieben neue Commits, unter anderem Swift-Package-Unterstützung und ein Update
+auf boring 5.3.0. Daraus folgt keine automatisch getestete Android-Kompatibilität.
+Der festgelegte Android-Client verwendet weiterhin seine eigene libsignal-Version
+0.105.4; Kryptobibliotheken werden nicht unabhängig vom Client ausgetauscht.
+
+Die erneut gelesene aktuelle signal-cli-README verlangt weiterhin JRE 25 und native
+libsignal-client-Bibliotheken. libsignal bezeichnet Fremdnutzung weiterhin als
+unsupported. Kein neuer belegter Android-SDK- oder öffentlicher Vollclient-API-Weg
+ersetzt damit die gewählte Companion-Strategie.
+Die [Signal-Gerätehilfe](https://support.signal.org/hc/en-us/articles/360007320551-Linked-Devices)
+bestätigt weiterhin Android-Linking, optionalen Chattransfer mit 45 Tagen Medien,
+maximal fünf Linked Devices und die bereits dokumentierten Inaktivitätsbedingungen.
+
+Codeprüfung fand zusätzliche lokale Navigationswege zur Primärregistrierung:
+asynchrone Wiederherstellung, Start-fresh und NavigateBackToScreen. Diese werden
+jetzt zusätzlich zur vorhandenen HTTP-Sperre gesperrt. Sieben credentialfreie
+Generator-/Konsistenztests bestehen; das ist kein Linking- oder Accountnachweis.
+Der alte CI-Lauf 40668223010 ist erfolgreich, enthält diese neuen Sperren aber noch
+nicht. Weitere Nachweise siehe Buildvalidierung und SIGNAL_HANDOFF.
+
 **Nachtrag zur anschließenden Fortsetzung:** Der unten beschriebene fehlende Companion
 war der Stand vor der Implementierung. Inzwischen sind ein pinned Clientgenerator,
 Einrichtungs-/Zustands-IPC und ein Orbiliq-Setup-Einstieg implementiert. Nachrichtenintegration
