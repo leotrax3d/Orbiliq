@@ -4,6 +4,10 @@ Stand: 28.10.2026. Prompt 11 ist **nicht abgeschlossen**.
 
 ## Neuester Fortsetzungsstand: Nachrichtenadapter implementiert, Geräteabnahme offen
 
+Aktueller korrigierter Companion-Lauf: **[40714064220](https://github.com/leotrax3d/Orbiliq/actions/runs/40714064220)**,
+Codecommit `704c286`. Zuletzt noch laufend, Ergebnis prüfen. Alle bisherigen Code-
+und Teständerungen sind auf `codex/signal-completion` gepusht.
+
 **Für die nächste Agentenübernahme zuerst den vollständigen
 [Übergabeprompt](SIGNAL_NEXT_AGENT_PROMPT.md) lesen.** Nutzer verlangt explizit,
 vor Kontext-/Nutzungslimit alles zu pushen und einen Fortsetzungsprompt bereitzulegen.

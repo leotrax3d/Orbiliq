@@ -88,8 +88,11 @@ Dokumentationsabsätze können ältere Stände beschreiben. Keine Subagenten bea
 - **40705057485**, Commit `1d820af`: ebenfalls erfolgreich, Nachrichtenprotokoll v2,
   readonly Gruppen/Platzhalter. Enthält noch NICHT die anschließend gefundenen
   UTF-8-/universeller-Timer-Korrekturen. Nicht als endgültig abgenommenen Stand nehmen.
-- Ein neuer Companion-Lauf für den aktuellen korrigierten Stand muss gestartet/
-  abgewartet werden; konkrete Run-ID im neuesten `SIGNAL_HANDOFF.md` nachtragen.
+- **40714064220**, Commit `704c286`: neuer Lauf für den korrigierten Stand mit
+  2-KiB-UTF-8-Prüfung und universellem Timer. Beim Schreiben läuft er noch.
+  https://github.com/leotrax3d/Orbiliq/actions/runs/40714064220
+  Ergebnis prüfen; nicht ohne erfolgreichen Build oder vorzeitige Geräteabnahme
+  als bestanden zählen.
 - Workflow: `gh workflow run signal-companion.yml --ref codex/signal-completion`.
   Große native Builds können lange dauern. Nie den großen Signal-Fork lokal auf
   dem Laptop bauen, keine häufigen unveränderten Statuspolls.
