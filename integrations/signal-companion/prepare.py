@@ -5,6 +5,7 @@ The generated tree keeps upstream Git history, license, source and dependency ve
 It is a research build, not an audited release or a complete messaging integration.
 """
 import argparse
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -22,9 +23,56 @@ def run(*args, cwd=None):
     return subprocess.check_output(args, cwd=cwd, text=True).strip()
 
 
+def block_primary_registration(checkout: Path):
+    """Remove primary-registration HTTP operations, including legacy entry points."""
+    targets = [
+        ("lib/network/src/main/java/org/signal/network/api/RegistrationApiV2.kt", "RequestResult",
+         ["createVerificationSession", "requestVerificationCode", "submitVerificationCode", "registerAccount"]),
+        ("lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/registration/RegistrationApi.kt", "NetworkResult",
+         ["createRegistrationSession", "requestSmsVerificationCode", "verifyAccount", "registerAccount"]),
+    ]
+    for relative, result, methods in targets:
+        path = checkout / relative
+        text = path.read_text()
+        for method in methods:
+            pattern = r"(  (?:suspend )?fun " + method + r"\([\s\S]*?\): [^{]+\{)[\s\S]*?\n  }"
+            replacement = r'\1\n    return ' + result + '.ApplicationError(UnsupportedOperationException("Companion supports linked devices only"))\n  }'
+            text, count = re.subn(pattern, replacement, text)
+            if count != 1:
+                raise RuntimeError("Upstream primary-registration boundary changed: " + method)
+        path.write_text(text)
+
+    activity = checkout / "feature/registration/src/main/java/org/signal/registration/RegistrationActivity.kt"
+    text = activity.read_text()
+    old = "val startDestination = IntentCompat.getParcelableExtra(intent, START_DESTINATION_EXTRA, RegistrationRoute::class.java)"
+    if text.count(old) != 1:
+        raise RuntimeError("Upstream registration entry changed")
+    activity.write_text(text.replace(old, "val startDestination = RegistrationRoute.LinkAccount(showCreateAccount = false) // Orbiliq: every launcher enters linking."))
+
+    viewmodel = checkout / "feature/registration/src/main/java/org/signal/registration/RegistrationViewModel.kt"
+    text = viewmodel.read_text()
+    old = "  init {\n    if (startDestination != null) {"
+    new = """  init {
+    if (_state.value.backStack.any { !CompanionRegistrationPolicy.allows(it) }) {
+      _state.value = RegistrationFlowState(backStack = listOf(RegistrationRoute.LinkAccount(showCreateAccount = false)), isRestoringNavigationState = false)
+    }
+    if (startDestination != null) {"""
+    if text.count(old) != 1:
+        raise RuntimeError("Upstream registration restoration changed")
+    text = text.replace(old, new)
+    old = "  private fun applyNavigationToScreenEvent(inputState: RegistrationFlowState, event: RegistrationFlowEvent.NavigateToScreen): RegistrationFlowState {\n"
+    if text.count(old) != 1:
+        raise RuntimeError("Upstream registration navigation changed")
+    text = text.replace(old, old + "    if (!CompanionRegistrationPolicy.allows(event.route)) return inputState\n")
+    text = text.replace("is RegistrationFlowEvent.ResetState -> RegistrationFlowState(isRestoringNavigationState = false)",
+                        "is RegistrationFlowEvent.ResetState -> RegistrationFlowState(backStack = listOf(RegistrationRoute.LinkAccount(showCreateAccount = false)), isRestoringNavigationState = false)")
+    viewmodel.write_text(text)
+
+
 def configure(checkout: Path):
     if run("git", "rev-parse", "HEAD", cwd=checkout) != REVISION:
         raise RuntimeError("Unexpected upstream revision")
+    block_primary_registration(checkout)
     build = checkout / "app/build.gradle.kts"
     text = build.read_text()
     needle = "  defaultConfig {\n"
@@ -128,6 +176,8 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
         path.write_text(text.replace(old, "vnd.org.orbiliq.signal.companion."))
     java = checkout / "app/src/main/java"
     shutil.copytree(HERE / "overlay/java", java, dirs_exist_ok=True)
+    shutil.copytree(HERE / "overlay/registration", checkout / "feature/registration/src/main/java", dirs_exist_ok=True)
+    shutil.copytree(HERE / "overlay/network-tests", checkout / "lib/network/src/test/java", dirs_exist_ok=True)
     common = ROOT / "core/provider-signal/src/main/kotlin/org/orbiliq/core/provider/signal/SignalCompanion.kt"
     dest = java / "org/orbiliq/core/provider/signal/SignalCompanion.kt"
     dest.parent.mkdir(parents=True, exist_ok=True)

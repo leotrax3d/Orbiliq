@@ -137,3 +137,35 @@ Das Artefakt enthält APK und modifizierten Quellbaum. Vor dem lokalen IPC-Test 
 die APK auf dem Laptop mit demselben lokalen Debug-Signer wie Orbiliq signiert werden;
 der CI-Signer allein wird von der installierten Orbiliq-App nicht akzeptiert.
 Ein grüner Build belegt noch keinen Account-Link und keine Messagingfunktion.
+
+Der lokale Signaturschritt erfolgt ausschließlich mit einer frisch heruntergeladenen
+CI-APK und einem neuen Ausgabepfad, beispielsweise (JDK und SDK-Tools im `PATH`):
+
+```sh
+apksigner verify --print-certs companion-ci.apk
+apksigner sign --ks "$HOME/.android/debug.keystore" \
+  --ks-key-alias AndroidDebugKey --ks-pass pass:android --key-pass pass:android \
+  --out companion-local.apk companion-ci.apk
+apksigner verify --print-certs companion-local.apk
+apksigner verify --print-certs app/build/outputs/apk/debug/app-debug.apk
+```
+
+Die SHA-256-Zertifikatsdigests müssen nach dem lokalen Signieren übereinstimmen.
+Vor einer Installation zusätzlich im fertigen Manifest die Application-ID
+`org.orbiliq.signal.companion`, die eigene Bridge-Authority und Signature-Permission
+prüfen. Nur das Companion-Paket installieren; die vorhandene Signal-App wird nicht
+ersetzt. Falls Orbiliq vor der Permission-Definition installiert wurde, dieselbe
+Orbiliq-APK ohne Datenlöschung erneut installieren. Ein abweichender Signer darf nicht
+über eine gelockerte Trustpolicy umgangen werden.
+
+## Primärregistrierung gesperrt
+
+Ein Hardwaretest zeigte, dass im ersten Build durch weitere Upstream-Einstiege eine
+Telefonnummernregistrierung erreichbar blieb. Dieser Build ist für weitere Accounttests
+überholt. Der Generator erzwingt nun Linking als Activity-Einstieg, beschränkt restaurierte
+Navigation auf Linking/Sync und entfernt die Primärregistrierungsoperationen aus beiden
+HTTP-APIs. Strikte Mock-Transporttests prüfen Ablehnung vor jeder Netzwerkaktion.
+Ein bereits als Primärgerät registrierter Companion wird dadurch nicht automatisch
+entkoppelt, gelöscht oder zum Sekundärgerät umgewandelt. Zuerst muss der Nutzer den
+Status seines ursprünglichen Signal-Accounts klären. Kein erneuter Accounttest mit
+dem ersten APK-Build.
