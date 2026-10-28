@@ -127,3 +127,13 @@ Build-/Testresultate und nicht ausgeführte Geräte-/Accountprüfungen stehen in
 Providervertrag und die Signaturpolicy, nicht die vollständige Android-Permissiongrenze
 oder den tatsächlichen Signal-Dienst. Der bestehende Upstream-Logging- und Sicherheitsstack
 ist nicht vollständig auditiert.
+
+## GitHub CI
+
+Der Workflow `signal-companion.yml` baut auf `codex/signal-companion-ci` die feste
+Upstream-Revision mit JDK 21, zwei Compiler-Kernen und einem Worker. CI nutzt einen
+eigenen kurzlebigen Debug-Signer und erhält keine lokalen Schlüssel oder Accountdaten.
+Das Artefakt enthält APK und modifizierten Quellbaum. Vor dem lokalen IPC-Test muss
+die APK auf dem Laptop mit demselben lokalen Debug-Signer wie Orbiliq signiert werden;
+der CI-Signer allein wird von der installierten Orbiliq-App nicht akzeptiert.
+Ein grüner Build belegt noch keinen Account-Link und keine Messagingfunktion.
