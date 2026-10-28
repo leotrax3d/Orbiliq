@@ -1,6 +1,14 @@
 # Projektkontext: Orbiliq
 
-Stand: 27. Oktober 2026.
+Stand: 28. Oktober 2026.
+
+**Prompt-11-Stand `586a3c2`:** Signal-Direktchats unterstützen Textempfang/-versand,
+Zitat-Antworten, eigene Reaktionen, Bildempfang und metadatenfreien Bildversand;
+Gruppen sind nur lesbar. Hardware-nachgewiesen (Pixel 10a, echter Account): Linking,
+Session nach Neustart, verweigerte/erteilte Nachrichtenfreigabe, Fremdbindung abgewiesen,
+Text an „Notiz an mich“ genau einmal inkl. Wiederholung. Antworten, Reaktionen und
+Bilder sind JVM-getestet; ihr Gerätenachweis folgt mit dem nächsten Companion-Build.
+Details: [Signal-Provider](architecture/signal-provider.md), [Übergabe](SIGNAL_HANDOFF.md).
 
 Aktueller Entwicklungsnachtrag zu Prompt 11: Die [direkte Signal-Textstrecke](architecture/signal-provider.md)
 ist im Code angelegt (separate kontogebundene Nachrichtenzustimmung, paginierte native

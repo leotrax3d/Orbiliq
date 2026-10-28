@@ -69,11 +69,27 @@ Fehler sichtbar; späte lokale Dispatchantworten überschreiben sie nicht.
 
 ## Capabilities und Prüfung
 
-Für die direkte Textstufe sind ausschließlich `message.text.send` und
-`message.text.receive` sowie `signal.group.title.receive` vorgesehen. Replies, Reaktionen, Medien, Gruppenverwaltung,
-Typing, Read-Receipt-Versand, Suche, Calls und Stories werden nicht freigegeben.
-Diese Liste beschreibt die implementierte Adapterstrecke, nicht alle Fähigkeiten
-des zugrunde liegenden nativen Clients.
+Freigegebene Capabilities (Stand `586a3c2`), jeweils nur, wenn die Strecke implementiert ist:
+
+| Capability | Umfang |
+|---|---|
+| `message.text.receive`, `signal.group.title.receive` | Direktchats, „Notiz an mich“, aktive Gruppen (nur lesen) |
+| `message.text.send` | Direktchats; 2048 UTF-8-Bytes; nicht bei Ablauf-/Universal-Timer |
+| `message.quoted-reply.send`, `signal.quote.receive` | Zitat nur auf exportierbare Textnachricht desselben Direktchats |
+| `reaction.add`, `signal.reaction.receive` | eigene Reaktion setzen/ändern (idempotent); Entfernen nicht freigegeben |
+| `signal.image.receive` | JPEG/PNG/WebP/GIF bis 16 MiB, Abruf auf Tippen, nur im Speicher |
+| `message.media.image.send` | JPEG ohne Metadaten (doppelt neu kodiert), Direktchats |
+
+Nicht freigegeben: Gruppenversand/-verwaltung, Video/Audio/Sprachnachrichten/Dateien,
+Bearbeiten, Löschen, Typing, Read-Receipt-Versand, Suche, Calls, Stories,
+View-once und verschwindende Inhalte (bleiben nativ). Diese Liste beschreibt die
+implementierte Adapterstrecke, nicht alle Fähigkeiten des nativen Clients.
+
+Einrichtung mit nur einem Handy: Der Verknüpfungsbildschirm des Companion kann den
+aktuellen, kurzlebigen QR-Code nach Bestätigung als Bild + `sgnl://linkdevice`-Link
+teilen (nur ephemerer öffentlicher Schlüssel; Datei wird beim Verlassen gelöscht),
+damit er auf einem beliebigen zweiten Bildschirm gescannt werden kann. Offizielles
+Signal bietet laut Upstream-Code keinen kamerafreien Verknüpfungsweg.
 
 Dreizehn neue JVM-Tests prüfen unter anderem unbekannte Wirkung ohne Resend,
 Accountwechsel, fremde Routen, Snapshot-Deduplizierung und Löschereignisse.
