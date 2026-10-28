@@ -579,6 +579,22 @@ Der korrigierte Companion-Lauf 40668223010 hat den Schritt
 Das ist noch kein erfolgreiches Device Linking.
 # Fortsetzung Signal am 28.10.2026 im neuen Windows-Workspace
 
+Nachtrag: WLAN-ADB erfolgreich gekoppelt und `device` bestätigt. Update des lokal
+neu signierten alten korrigierten Companion-Artefakts durch Android wegen abweichendem
+Bestandssigner abgewiesen; keine Installation oder Datenlöschung erfolgt. Auch das
+öffentliche Zertifikat der installierten Orbiliq-APK weicht ab. App und Test-APK aus
+diesem Workspace besitzen dagegen denselben aktuellen lokalen Signer wie der hier
+neu signierte Companion. Nutzer kennt keinen weiteren früheren Keystore; Zustimmung
+zu einer eventuellen Neuinstallation mit Datenverlust separat angefragt.
+
+Lokaler Windows-Build `:app:assembleDebug :app:assembleDebugAndroidTest` nach Ergänzung
+des Windows-AAPT2-Hashes erfolgreich: **BUILD SUCCESSFUL in 28s**. SHA-256
+`5fe3c8ee5c6b3f47efd1fced1d6418084037f54f13290816c5db717e6b5c92aa`
+des AAPT2-9.4.1-15978811-Windows-JARs gegen einen unabhängigen HTTPS-Download von
+`dl.google.com/dl/android/maven2` geprüft. Keine Verifikationsausnahme aktiviert.
+Neue Hardware-Instrumentationstests weiterhin nicht ausgeführt.
+Companion-CI für Commit `9839d88`: Run 40693619335, noch ohne abschließendes Ergebnis.
+
 Ausgangspunkt: `origin/codex/signal-provider-tests`; Arbeitsbranch
 `codex/signal-completion`. Vorhandener Companion-CI-Lauf 40668223010 über `gh run view`
 als success bestätigt, Artefakte heruntergeladen. Kein Installationsnachweis daraus

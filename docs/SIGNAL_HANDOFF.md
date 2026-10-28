@@ -4,6 +4,27 @@ Stand: 28.10.2026. Prompt 11 ist **nicht abgeschlossen**.
 
 ## Fortsetzung im neuen Workspace am 28.10.2026
 
+### Geräteverbindung und Signierschlüssel
+
+WLAN-ADB erfolgreich mit dem Pixel gekoppelt; `get-state` bestätigt `device`.
+Keinen Kopplungscode in Dokumentation, Git oder Logs übernehmen.
+USB blieb offline/fehlend. Der heruntergeladene CI-Companion aus 40668223010 wurde
+lokal mit dem vorhandenen Debug-Keystore neu signiert. `adb install -r` wurde von
+Android mit `INSTALL_FAILED_UPDATE_INCOMPATIBLE` verweigert: der alte installierte
+Companion hat einen anderen Signer. Auch das öffentliche Signaturzertifikat der
+installierten Orbiliq-APK unterscheidet sich vom hiesigen Debug-Schlüssel.
+Der Nutzer kennt keinen weiteren Keystore. Kein Uninstall, Datenreset oder Aktivieren
+des alten deaktivierten Companions ausgeführt. Ein sauberer Neustart der Test-Apps
+benötigt ausdrückliche Zustimmung zum Verlust ihrer lokalen Daten. Die ursprüngliche
+Signal-App bleibt unangetastet.
+
+Security-Fortsetzung ist als `9839d88` auf `codex/signal-completion` gepusht;
+neuer Companion-CI-Lauf: https://github.com/leotrax3d/Orbiliq/actions/runs/40693619335
+(zum Zeitpunkt dieses Eintrags läuft er noch; Ergebnis prüfen).
+Der erste Windows-Orbiliq-Build scheiterte am fehlenden verifizierten Windows-AAPT2-
+Artefakt. Hash durch unabhängigen Download von Google Maven gegengeprüft und ergänzt.
+App-/Test-APK-Build wird danach erneut ausgeführt.
+
 - Aktiver Arbeitsbranch: `codex/signal-completion`, auf Basis von
   `origin/codex/signal-provider-tests`; `main` enthält den Signal-Zwischenstand nicht.
 - CI 40668223010 erfolgreich. Artefakte liegen lokal unter
