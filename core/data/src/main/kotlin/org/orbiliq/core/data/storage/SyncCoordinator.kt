@@ -97,7 +97,7 @@ class SyncCoordinator(
         catch (_: Exception) { DispatchResult.OutcomeUnknown("transport.exception") }
         when(result) {
             is DispatchResult.Confirmed -> repository.updateOperation(id, PendingStatus.Confirmed, remote = result.remoteMessage)
-            is DispatchResult.Accepted -> repository.updateOperation(id, PendingStatus.Accepted, receipt = result.receipt)
+            is DispatchResult.Accepted -> repository.updateOperation(id, PendingStatus.Accepted, receipt = result.receipt, remote = result.remoteMessage)
             is DispatchResult.Rejected -> repository.updateOperation(id, PendingStatus.Rejected, failure = result.failure.category)
             is DispatchResult.RetryableNoEffect -> repository.updateOperation(id, PendingStatus.RetryableNoEffect,
                 maxOf(result.failure.retryAt ?: now(), now().plusMillis(backoff(operation.attempts + 1))), failure = result.failure.category)

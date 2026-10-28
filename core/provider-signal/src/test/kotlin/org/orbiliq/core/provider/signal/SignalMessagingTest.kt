@@ -20,9 +20,14 @@ class SignalMessagingTest {
         val rows = java.util.concurrent.ConcurrentHashMap<Long, SignalText>()
         var sendCalls = 0
         var unknown = false
+        var threadRows = listOf(SignalThread(7, "Fixture", true, true, "9"))
         override suspend fun binding() = current
-        override suspend fun threads(binding: SignalBinding) = listOf(SignalThread(7, "Fixture", true, true, "9"))
-        override suspend fun texts(binding: SignalBinding, thread: Long, beforeId: Long) = SignalTextPage(rows.values.filter { it.thread == thread && it.id < beforeId }.toList(), null)
+        override suspend fun threads(binding: SignalBinding) = threadRows
+        override suspend fun texts(binding: SignalBinding, thread: Long, beforeId: Long): SignalTextPage {
+            val remaining = rows.values.filter { it.thread == thread && it.id < beforeId }.sortedByDescending { it.id }
+            val page = remaining.take(SignalMessagingContract.PAGE_SIZE)
+            return SignalTextPage(page, if (remaining.size > page.size) page.last().id else null)
+        }
         override suspend fun lookup(binding: SignalBinding, thread: Long, ids: List<Long>) = ids.mapNotNull { rows[it]?.takeIf { row -> row.thread == thread } }
         override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String): SignalSendResult {
             sendCalls++
@@ -52,6 +57,7 @@ class SignalMessagingTest {
             assertEquals(setOf(Operations.SendText, Operations.ReceiveText), caps.operations.keys)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4001)) is Availability.Restricted)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2)) is Availability.Unsupported)
+            assertTrue(session.evaluate(OperationRequest(CapabilityScope.Conversation(ProviderId("signal"), ConversationRef(session.accountId, "unknown")), Operations.SendText, textLength = 2)) is Availability.Unsupported)
             assertEquals(ReplayClass.BestEffort, caps.operations.getValue(Operations.ReceiveText).replay)
         }
     }
@@ -111,5 +117,44 @@ class SignalMessagingTest {
         assertEquals("SignalBinding(redacted)", binding.toString())
         assertEquals("SignalText(redacted)", text().toString())
         assertFalse(SignalThread(7, "private contact", true, true, "9").toString().contains("private"))
+    }
+    @Test fun keysetPagesImportBeyondTheFirstPage() = runBlocking {
+        val peer = Peer(binding).apply { (1L..121L).forEach { rows[it] = text(it) } }
+        running(peer) { _, events ->
+            assertEquals(121, events.count { it.payload is ProviderEvent.MessageUpserted })
+        }
+    }
+    @Test fun groupsExposeReceivedTextAndTitleButNeverUnimplementedSending() = runBlocking {
+        val peer = Peer(binding).apply {
+            threadRows = listOf(SignalThread(7, "Fixture group", false, true, "9"))
+            rows[11] = text()
+        }
+        running(peer) { session, events ->
+            assertTrue(events.any { it.payload is ProviderEvent.GroupChanged })
+            val changed = events.mapNotNull { (it.payload as? ProviderEvent.ConversationChanged)?.conversation }.single()
+            assertEquals(ConversationKind.Group, changed.kind)
+            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.ReceiveText)) is Availability.Available)
+            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4)) is Availability.Restricted)
+            assertTrue(session.execute(command(session)) is DispatchResult.Rejected)
+            assertEquals(0, peer.sendCalls)
+        }
+    }
+    @Test fun unsupportedNativeContentRemainsAnExplicitPlaceholder() = runBlocking {
+        val peer = Peer(binding).apply { rows[11] = SignalText(11, 7, "9", "", false, now.toEpochMilli(), now.toEpochMilli(), "Sent", supported = false) }
+        running(peer) { _, events ->
+            assertTrue(events.mapNotNull { (it.payload as? ProviderEvent.MessageUpserted)?.message }.single().content is MessageContent.Unsupported)
+        }
+    }
+    @Test fun factoryRequiresExactCurrentAccountAndBindingReference() = runBlocking<Unit> {
+        val peer = Peer(binding)
+        val factory = SignalMessagingProviderFactory(peer)
+        val account = SignalMessagingSession.accountFor(binding)
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { factory.open(AccountHandle(account, "wrong-reference")) } }
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { factory.open(AccountHandle(account.copy(id = AccountId("other")), binding.id)) } }
+        val session = factory.open(AccountHandle(account, binding.id))
+        assertEquals(account.id, session.accountId)
+        session.close()
+        peer.current = null
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { factory.open(AccountHandle(account, binding.id)) } }
     }
 }

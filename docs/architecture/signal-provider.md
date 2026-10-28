@@ -27,10 +27,11 @@ Eine kleine zusätzliche native MessageTable-Methode verwendet stabile ID-Keyset
 statt veränderlicher OFFSET-Seiten. Geschichten, geplante Nachrichten und überholte
 Editrevisionen werden aus der Seitenauswahl ausgeschlossen.
 
-Die erste Ausbaustufe exportiert ausschließlich normale Direktchat-Texte bis 4000
+Die erste Ausbaustufe exportiert normale Direktchat- und Gruppentexte bis 4000
 UTF-16-Codeeinheiten. View-once-Inhalte, verschwindende Nachrichten und Chats mit
-aktivem Expire-Timer werden nicht in den Kern kopiert. Gruppen und Medien bleiben
-in dieser Stufe im nativen Client. Bekannte lokale Nachrichten werden gegen die
+aktivem Expire-Timer werden nicht in den Kern kopiert. Gruppen sind zunächst nur
+lesbar; Medien bleiben im nativen Client und erhalten einen Inhaltsplatzhalter.
+Bekannte lokale Nachrichten werden gegen die
 Quelle geprüft; entfernte oder nicht mehr exportierbare Inhalte erzeugen
 `MessageDeleted`. Alte Editrevisionen werden nicht weiter ausgegeben.
 
@@ -67,12 +68,12 @@ Fehler sichtbar; späte lokale Dispatchantworten überschreiben sie nicht.
 ## Capabilities und Prüfung
 
 Für die direkte Textstufe sind ausschließlich `message.text.send` und
-`message.text.receive` vorgesehen. Replies, Reaktionen, Medien, Gruppenverwaltung,
+`message.text.receive` sowie `signal.group.title.receive` vorgesehen. Replies, Reaktionen, Medien, Gruppenverwaltung,
 Typing, Read-Receipt-Versand, Suche, Calls und Stories werden nicht freigegeben.
 Diese Liste beschreibt die implementierte Adapterstrecke, nicht alle Fähigkeiten
 des zugrunde liegenden nativen Clients.
 
-Sieben neue JVM-Tests prüfen unter anderem unbekannte Wirkung ohne Resend,
+Zehn neue JVM-Tests prüfen unter anderem unbekannte Wirkung ohne Resend,
 Accountwechsel, fremde Routen, Snapshot-Deduplizierung und Löschereignisse.
 Ein zusätzlicher Persistenztest schützt gegen fälschlich bestätigte native Queues
 und gegen das Überschreiben späterer Versandfehler. Opt-in Gerätetests prüfen

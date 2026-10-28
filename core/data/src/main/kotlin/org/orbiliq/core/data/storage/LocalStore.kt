@@ -192,7 +192,9 @@ class PersistentLocalRepository(private val storage: SnapshotStorage) : LocalRep
                 }
             }
             is ProviderEvent.MessageDeleted -> {
-                messages.removeAll { it.ref == p.ref }; reactions.removeAll { it.message == p.ref }
+                p.commandId?.let { id -> pending.find { it.command.id == id }?.let { require(it.command.route == p.ref.conversation) } }
+                messages.removeAll { it.ref == p.ref || (p.commandId != null && it.id == MessageId(p.commandId.value) && it.route == p.ref.conversation) }
+                reactions.removeAll { it.message == p.ref }
             }
             is ProviderEvent.ReceiptChanged -> messages.replaceAll { if(it.ref == p.message) it.copy(delivery = p.state) else it }
             is ProviderEvent.Extension -> metadata.replace(p.data) { it.providerId == p.data.providerId && it.namespace == p.data.namespace }

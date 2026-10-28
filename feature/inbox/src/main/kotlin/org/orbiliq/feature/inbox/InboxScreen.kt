@@ -315,7 +315,7 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
             Avatar(route.conversation.title)
             Text(route.conversation.title, style = MaterialTheme.typography.headlineMedium)
             Text("Provider: ${route.providerId.value}\nKonto: ${snapshot.accounts.find { it.id == route.conversation.ref.accountId }?.displayName}\nVerschlüsselung: ${route.conversation.security.encryption}\nIdentitätsprüfung: ${route.conversation.security.verification}")
-            Text("${route.conversation.participants.size} Identitäten · ${if (route.conversation.kind == ConversationKind.Group) "Gruppe" else "Direktchat"}")
+            Text(if (route.conversation.kind == ConversationKind.Group && route.conversation.participants.isEmpty()) "Gruppe · Mitgliederverwaltung im Companion" else "${route.conversation.participants.size} Identitäten · ${if (route.conversation.kind == ConversationKind.Group) "Gruppe" else "Direktchat"}")
             if (linked != null) FilledTonalButton(onClick = { details = false; onPerson(linked.personId.value) }) { Text("Person ansehen") }
         }
     }
@@ -360,7 +360,7 @@ private fun AccountsScreen(snapshot: MessengerSnapshot, settings: () -> Unit) {
                 }
             }
         }
-        item { Text(if (snapshot.simulation) "Dieses Build verwendet ausschließlich synthetische Mock-Daten." else "Verknüpfe den Companion und erteile dort den Nachrichtenzugriff. Der aktuelle Signal-Adapter übernimmt normale Direktchat-Texte; ältere Historie, Gruppen, Medien und verschwindende Inhalte sind hier noch nicht verfügbar.", style = MaterialTheme.typography.bodyMedium) }
+        item { Text(if (snapshot.simulation) "Dieses Build verwendet ausschließlich synthetische Mock-Daten." else "Verknüpfe den Companion und erteile dort den Nachrichtenzugriff. Die Historie umfasst den vorhandenen nativen Gerätebestand. Normale Direktchat-Texte können gesendet werden, Gruppentexte sind lesbar. Medien, Gruppenversand und verschwindende Inhalte bleiben vorerst im Companion.", style = MaterialTheme.typography.bodyMedium) }
     }
     snapshot.accounts.find { it.id.value == accountId }?.let { account -> ModalBottomSheet(onDismissRequest = { accountId = null }) {
         Column(Modifier.padding(24.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(16.dp)) {

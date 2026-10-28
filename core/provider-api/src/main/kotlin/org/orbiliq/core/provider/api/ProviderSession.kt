@@ -59,7 +59,7 @@ sealed interface DispatchResult {
     data class Rejected(val failure: ProviderFailure) : DispatchResult
     data class RetryableNoEffect(val failure: ProviderFailure) : DispatchResult
     /** Allowed only after durable provider ownership of transport retries. */
-    data class Accepted(val receipt: String) : DispatchResult { init { require(receipt.isNotBlank()) } }
+    data class Accepted(val receipt: String, val remoteMessage: MessageRef? = null) : DispatchResult { init { require(receipt.isNotBlank()) } }
     data class Confirmed(val remoteMessage: MessageRef? = null) : DispatchResult
     data class OutcomeUnknown(val diagnosticCode: String? = null) : DispatchResult
 }

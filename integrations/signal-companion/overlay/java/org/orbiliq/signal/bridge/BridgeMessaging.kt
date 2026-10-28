@@ -41,7 +41,7 @@ internal class BridgeMessaging(private val context: Context) {
   }
   fun approve() = synchronized(gate) {
     check(BridgeAccess(context).hasConsent())
-    val bytes = (currentBinding() + ":" + BridgeAccess(context).currentClientSigner()).toByteArray(Charsets.UTF_8)
+    val bytes = ("scope-v2:" + currentBinding() + ":" + BridgeAccess(context).currentClientSigner()).toByteArray(Charsets.UTF_8)
     val stream = grant.startWrite()
     try { stream.write(bytes); grant.finishWrite(stream) }
     catch (e: Exception) { grant.failWrite(stream); throw e }
@@ -50,7 +50,7 @@ internal class BridgeMessaging(private val context: Context) {
   private fun authorizedBinding(): String {
     check(BridgeAccess(context).hasConsent())
     val binding = currentBinding()
-    check(grant.readFully().toString(Charsets.UTF_8) == binding + ":" + BridgeAccess(context).currentClientSigner())
+    check(grant.readFully().toString(Charsets.UTF_8) == "scope-v2:" + binding + ":" + BridgeAccess(context).currentClientSigner())
     return binding
   }
   fun call(method: String, extras: Bundle): Bundle = synchronized(gate) {
@@ -66,13 +66,13 @@ internal class BridgeMessaging(private val context: Context) {
             val record = reader.getNext() ?: break
             val recipient = record.recipient
             // Groups/media/ephemeral content remain in the native companion until implemented.
-            if (!recipient.isIndividual && !recipient.isSelf) continue
+            if (!recipient.isIndividual && !recipient.isSelf && !(recipient.isGroup && recipient.isActiveGroup)) continue
             rows += Bundle().apply {
               putLong("id", record.threadId)
               putString("title", recipient.getDisplayName(context).take(512))
-              putBoolean("direct", true)
+              putBoolean("direct", !recipient.isGroup)
               putString("peer", identity(recipient))
-              putBoolean("canSend", recipient.isRegistered && !recipient.isBlocked && recipient.expiresInSeconds == 0)
+              putBoolean("canSend", !recipient.isGroup && recipient.isRegistered && !recipient.isBlocked && recipient.expiresInSeconds == 0)
             }
           }
         }
@@ -98,7 +98,7 @@ internal class BridgeMessaging(private val context: Context) {
         val beforeId = extras.getLong("beforeId", Long.MAX_VALUE)
         require(beforeId > 0)
         val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)
-        check(recipient != null && (recipient.isIndividual || recipient.isSelf))
+        check(recipient != null && (recipient.isIndividual || recipient.isSelf || (recipient.isGroup && recipient.isActiveGroup)))
         val rows = arrayListOf<Bundle>()
         var scanned = 0
         var lastId = 0L
@@ -128,13 +128,16 @@ internal class BridgeMessaging(private val context: Context) {
   }
   private fun export(message: MessageRecord): Bundle? {
     val recipient = SignalDatabase.threads.getRecipientForThreadId(message.threadId) ?: return null
-    if ((!recipient.isIndividual && !recipient.isSelf) || recipient.expiresInSeconds != 0 ||
+    if ((!recipient.isIndividual && !recipient.isSelf && !(recipient.isGroup && recipient.isActiveGroup)) || recipient.expiresInSeconds != 0 ||
         !message.isSecure || !message.isLatestRevision || message.isViewOnce || message.isRemoteDelete || message.expiresIn != 0L ||
-        message.isUpdate || message.body.isEmpty() || message.body.length > SignalMessagingContract.MAX_TEXT) return null
+        message.isUpdate) return null
+    val supported = message.body.isNotEmpty() && message.body.length <= SignalMessagingContract.MAX_TEXT &&
+      SignalDatabase.attachments.getAttachmentsForMessage(message.id).all { it.quote }
     return Bundle().apply {
       putLong("id", message.id); putLong("thread", message.threadId)
       putString("sender", identity(message.fromRecipient))
-      putString("text", message.body); putBoolean("outgoing", message.isOutgoing)
+      putString("senderName", message.fromRecipient.getDisplayName(context).take(512))
+      putString("text", if (supported) message.body else ""); putBoolean("supported", supported); putBoolean("outgoing", message.isOutgoing)
       putLong("timestamp", message.dateSent); putLong("received", message.dateReceived)
       putString("delivery", when {
         message.isFailed -> "Failed"

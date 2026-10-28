@@ -24,3 +24,4 @@ Details: [Gesamtarchitektur](../architecture/README.md) und [Capability-Vertrag]
 - [0013 – Konservative und korrigierbare Kontaktzuordnungen](0013-unified-contacts.md)
 - [0014: Abgeleitete Personen-Timelines und explizite Versandwege](0014-unified-communication.md)
 - [0015: Signal-Companion zuerst mit abgesicherter Einrichtung und lokalem Status](0015-signal-companion-linking-milestone.md)
+- [0016: Native Signal-Quelle und kontogebundene Versand-Claims](0016-signal-native-source-and-command-claims.md)

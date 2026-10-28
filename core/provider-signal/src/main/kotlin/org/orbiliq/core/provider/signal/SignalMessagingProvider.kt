@@ -14,7 +14,7 @@ import org.orbiliq.core.provider.api.*
 
 class SignalMessagingProviderFactory(private val transport: SignalMessagingTransport) : ProviderFactory {
     override val descriptor = ProviderDescriptor(ProviderId("signal"), "Signal Companion", "0.2-direct-text",
-        ContractVersion(1, 0), setOf(Operations.SendText, Operations.ReceiveText), ReplayClass.BestEffort)
+        ContractVersion(1, 0), setOf(Operations.SendText, Operations.ReceiveText, OperationKey("signal.group.title.receive")), ReplayClass.BestEffort)
     override suspend fun open(account: AccountHandle): ProviderSession {
         require(account.account.providerId == descriptor.id)
         val binding = requireNotNull(transport.binding()) { "signal.messaging.consent-required" }
@@ -23,7 +23,7 @@ class SignalMessagingProviderFactory(private val transport: SignalMessagingTrans
     }
 }
 
-/** Direct normal text only. Native Signal owns encryption, network retries and identity checks. */
+/** Normal direct text and read-only groups. Native Signal owns protocol state and retries. */
 class SignalMessagingSession(
     private val binding: SignalBinding,
     private val transport: SignalMessagingTransport,
@@ -39,9 +39,11 @@ class SignalMessagingSession(
     override val state = stateValue.asStateFlow()
     private val threadState = MutableStateFlow<Map<Long, SignalThread>>(emptyMap())
     private val sequence = AtomicLong()
-    private val known = previousMessages.groupBy { it.conversation.remoteConversationId.toLong() }.mapValues { (_, refs) ->
-        refs.map { it.remoteMessageId.toLong() }.toMutableSet()
-    }.toMutableMap()
+    private val known = java.util.concurrent.ConcurrentHashMap<Long, MutableSet<Long>>().apply {
+        previousMessages.groupBy { it.conversation.remoteConversationId.toLong() }.forEach { (thread, refs) ->
+            put(thread, java.util.concurrent.ConcurrentHashMap.newKeySet<Long>().apply { addAll(refs.map { it.remoteMessageId.toLong() }) })
+        }
+    }
     private val revisions = mutableMapOf<String, String>()
     private val initialScanComplete = mutableSetOf<Long>()
     private val firstPageBoundary = mutableMapOf<Long, Long>()
@@ -55,7 +57,7 @@ class SignalMessagingSession(
                 try {
                     check(transport.binding()?.id == binding.id)
                     stateValue.value = state.value.copy(auth = AuthState.Ready, connection = ConnectionState.Online,
-                        requirements = setOf("signal.connection.local-ipc", "signal.history.latest-page-only", "signal.ephemeral.native-only"))
+                        requirements = setOf("signal.connection.local-ipc", "signal.history.native-device-only", "signal.ephemeral.native-only"))
                 } catch (e: CancellationException) { throw e }
                 catch (_: Exception) { stateValue.value = ProviderState(AuthState.Blocked, ConnectionState.Offline, SyncState.Degraded) }
                 delay(pollMillis)
@@ -86,14 +88,19 @@ class SignalMessagingSession(
             else -> null
         }
         val thread = remote?.let { threadState.value[it] }
-        val ready = job.isActive && state.value.auth == AuthState.Ready && validScope(scope)
-        val allowed = remote == null || (thread?.direct == true && thread.canSend)
-        val operations = if (!ready) emptyMap() else mapOf(
+        val routeScoped = scope is CapabilityScope.Conversation || scope is CapabilityScope.Message
+        val ready = job.isActive && state.value.auth == AuthState.Ready && validScope(scope) && (!routeScoped || thread != null)
+        val allowed = !routeScoped || (thread?.direct == true && thread.canSend)
+        val operations = if (!ready) emptyMap() else buildMap {
+            putAll(mapOf(
             Operations.ReceiveText to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             Operations.SendText to OperationSupport(if (allowed) Availability.Available(OperationConstraints(maxTextLength = SignalMessagingContract.MAX_TEXT,
-                persistentOfflineQueue = true)) else Availability.Restricted(Restriction.Policy),
+                persistentOfflineQueue = true, targetKinds = setOf(ConversationKind.Direct, ConversationKind.Saved))) else Availability.Restricted(Restriction.Policy),
                 quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security),
-        )
+            ))
+            if (remote == null || thread?.direct == false) put(OperationKey("signal.group.title.receive"),
+                OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security))
+        }
         return CapabilitySnapshot(scope, "signal-text-v1:${thread?.canSend}:$ready", now, now.plusSeconds(15), operations)
     }
     override fun observeCapabilities(scope: CapabilityScope): Flow<CapabilitySnapshot> = combine(state, threadState) { _, _ -> support(scope) }
@@ -118,14 +125,18 @@ class SignalMessagingSession(
                 require(threads.size <= SignalMessagingContract.MAX_THREADS && threads.map { it.id }.distinct().size == threads.size)
                 threadState.value = threads.associateBy { it.id }
                 stateValue.value = ProviderState(AuthState.Ready, ConnectionState.Online, SyncState.CatchingUp,
-                    requirements = setOf("signal.connection.local-ipc", "signal.history.latest-page-only", "signal.ephemeral.native-only"))
+                    requirements = setOf("signal.connection.local-ipc", "signal.history.native-device-only", "signal.ephemeral.native-only"))
                 for (thread in threads) {
-                    if (!thread.direct) continue
-                    event(ProviderEvent.IdentityChanged(MessengerIdentity(identityId(thread.peer), IdentityRef(accountId, thread.peer),
+                    if (thread.direct) event(ProviderEvent.IdentityChanged(MessengerIdentity(identityId(thread.peer), IdentityRef(accountId, thread.peer),
                         if (thread.peer == "self") "Ich" else thread.title)), "peer:${thread.peer}", revision(thread.title))
+                    val groupId = if (thread.direct) null else GroupId("${accountId.value}:group:${thread.id}")
+                    if (groupId != null) event(ProviderEvent.GroupChanged(Group(groupId, GroupRef(accountId, thread.id.toString()), thread.title)),
+                        "group:${thread.id}", revision(thread.title))
                     event(ProviderEvent.ConversationChanged(Conversation(conversationId(thread.id), conversation(thread.id), thread.title,
-                        ConversationKind.Direct, participants = setOf(identityId("self"), identityId(thread.peer)), security = security)), "thread:${thread.id}", revision(thread.title + thread.canSend))
-                    val ids = known.getOrPut(thread.id) { mutableSetOf() }
+                        if (thread.direct) ConversationKind.Direct else ConversationKind.Group,
+                        participants = if (thread.direct) setOf(identityId("self"), identityId(thread.peer)) else emptySet(), groupId = groupId,
+                        security = security)), "thread:${thread.id}", revision(thread.title + thread.canSend + thread.direct))
+                    val ids = known.getOrPut(thread.id) { java.util.concurrent.ConcurrentHashMap.newKeySet<Long>() }
                     val current = mutableListOf<SignalText>()
                     var beforeId = Long.MAX_VALUE
                     var pages = 0
@@ -150,20 +161,23 @@ class SignalMessagingSession(
                         val found = sendGate.withLock { transport.lookup(binding, thread.id, chunk) }
                         require(found.all { it.thread == thread.id && it.id in chunk })
                         for (id in chunk) if (found.none { it.id == id }) {
-                            event(ProviderEvent.MessageDeleted(messageRef(thread.id, id), null), "deleted:$id", "1")
+                            val ref = messageRef(thread.id, id)
+                            event(ProviderEvent.MessageDeleted(ref, null, commandMessages[ref]), "deleted:$id", "1")
                             ids.remove(id); revisions.remove("message:$id")
                         }
                         found.forEach { checked[it.id] = it }
                     }
                     for (text in checked.values) {
                         val sender = IdentityRef(accountId, if (text.outgoing) "self" else text.sender)
+                        val senderName = if (text.outgoing) "Ich" else text.senderName.ifEmpty { if (thread.direct) thread.title else "Signal-Teilnehmer" }
                         event(ProviderEvent.IdentityChanged(MessengerIdentity(identityId(sender.remoteIdentityId), sender,
-                            if (text.outgoing) "Ich" else thread.title)), "sender:${text.sender}", revision(thread.title + text.outgoing))
+                            senderName)), "sender:${text.sender}", revision(senderName))
                         val message = Message(MessageId("${accountId.value}:message:${text.id}"), conversationId(thread.id), conversation(thread.id), sender,
-                            MessageContent.Text(text.text), if (text.outgoing) MessageDirection.Outgoing else MessageDirection.Incoming,
+                            if (text.supported) MessageContent.Text(text.text) else MessageContent.Unsupported(MessageType("signal.native-content"), 1, "Diesen Inhalt im Signal Companion öffnen"),
+                            if (text.outgoing) MessageDirection.Outgoing else MessageDirection.Incoming,
                             Instant.ofEpochMilli(text.received), Instant.ofEpochMilli(text.timestamp), messageRef(thread.id, text.id),
-                            revision = revision(text.text + text.delivery), delivery = DeliveryState.valueOf(text.delivery),
-                            quality = DataQuality.PartialHistory, security = security)
+                            providerOrder = text.id.toString().padStart(20, '0'), revision = revision(text.text + text.delivery + text.supported), delivery = DeliveryState.valueOf(text.delivery),
+                            quality = DataQuality.PartialHistory, security = security, policy = ContentPolicy(cacheAllowed = true))
                         val command = commandMessages[message.ref]
                         revisions.remove("deleted:${text.id}")
                         event(ProviderEvent.MessageUpserted(message, command), "message:${text.id}", "${message.revision}:${command?.value}")
@@ -172,7 +186,10 @@ class SignalMessagingSession(
                 }
                 // Removed threads must not leave copied messages behind.
                 for (thread in known.keys.filter { id -> threads.none { it.id == id } }) {
-                    for (id in known.getValue(thread)) event(ProviderEvent.MessageDeleted(messageRef(thread, id), null), "deleted:$id", "1")
+                    for (id in known.getValue(thread)) {
+                        val ref = messageRef(thread, id)
+                        event(ProviderEvent.MessageDeleted(ref, null, commandMessages[ref]), "deleted:$id", "1")
+                    }
                     known.remove(thread)
                 }
                 stateValue.value = state.value.copy(sync = SyncState.Gap)
@@ -194,14 +211,15 @@ class SignalMessagingSession(
         val scope = CapabilityScope.Conversation(provider, command.route)
         if (!job.isActive || thread == null || command.route.accountId != accountId || text.replyTo != null || command.schemaVersion != 1 ||
             clock.instant() < command.createdAt || clock.instant() >= command.expiresAt || command.dependencies.isNotEmpty() ||
-            command.capabilityRevision != support(scope).revision || evaluate(OperationRequest(scope, Operations.SendText, textLength = text.text.length)) !is Availability.Available)
+            command.capabilityRevision != support(scope).revision || evaluate(OperationRequest(scope, Operations.SendText, textLength = text.text.length, targetKind = ConversationKind.Direct)) !is Availability.Available)
             return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
         return try {
             check(transport.binding()?.id == binding.id)
             when (val result = transport.sendText(binding, command.id.value, thread, text.text)) {
                 is SignalSendResult.Queued -> {
                     commandMessages[messageRef(thread, result.messageId)] = command.id
-                    DispatchResult.Accepted(result.messageId.toString())
+                    known.getOrPut(thread) { java.util.concurrent.ConcurrentHashMap.newKeySet<Long>() }.add(result.messageId)
+                    DispatchResult.Accepted(result.messageId.toString(), messageRef(thread, result.messageId))
                 }
                 SignalSendResult.Rejected -> DispatchResult.Rejected(ProviderFailure(FailureCategory.PolicyExpired))
                 SignalSendResult.Unknown -> DispatchResult.OutcomeUnknown("signal.send.unknown")

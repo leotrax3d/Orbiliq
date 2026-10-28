@@ -1,8 +1,8 @@
 # Orbiliq
 
 Datenschutzorientierter Unified-Messenger für Android. Aktuell: bedienbare Compose-Messenger-Oberfläche mit Material 3 Expressive, Dynamic Color und Hell-/Dunkelmodus.
-Es sind **keine echten Messenger integriert**. Ein optionaler lokaler Mock-Messenger ermöglicht Entwicklung ohne Account und Netzwerk.
-Keine Netzwerkberechtigung, Tracker oder Play-Services-Pflicht.
+Die Signal-Integration ist in Entwicklung: echtes Device Linking und lokale Sessionpersistenz sind nachgewiesen; die neue Nachrichtenstrecke ist noch nicht auf Hardware abgenommen. Ein optionaler lokaler Mock-Messenger ermöglicht Entwicklung ohne Account und Netzwerk.
+Der Orbiliq-Kern nutzt lokale IPC; der separate Companion übernimmt Signal-Netzwerkverkehr. Keine Tracker oder verpflichtenden Play Services im Kern.
 
 ## Build nach einem Clean Checkout
 
@@ -45,7 +45,7 @@ JVM-Ergebnisse stehen unter `<modul>/build/reports/tests/`, Android-Ergebnisse u
 
 Der Debug-Schalter öffnet die Messenger-Oberfläche mit zwei lokalen Testchats und sichtbaren Mock-Hinweisen. Chats lesen, Texte/Antworten senden, archivieren, Personen und Konten ansehen sowie Darstellung einstellen sind bedienbar.
 [UI-Konzept, Quellen und Grenzen](docs/architecture/messenger-ui.md).
-Ohne Schalter bleibt der normale Leerzustand bestehen; Release enthält den Mock nicht.
+Ohne Schalter wartet die App auf einen separat installierten und ausdrücklich für Nachrichten freigegebenen Signal-Companion. Release enthält den Mock nicht.
 Login, Kontakte/Gruppen, Nachrichten/Medien und Fehler lassen sich über die Provider-API
 steuern. Sieben wiederverwendbare Szenarien decken Unterhaltung, Medien, Offline-Recovery,
 unklare Versandwirkung, Revisionskonflikte, Capabilitywechsel und Sync-Gaps ab.
@@ -56,8 +56,9 @@ unklare Versandwirkung, Revisionskonflikte, Capabilitywechsel und Sync-Gaps ab.
 
 Experimenteller [Signal-Companion-Einrichtungspfad](integrations/signal-companion/README.md):
 separater Clientbuild aus festgelegter Signal-Android-Revision, lokale Zustimmung und
-Verknüpfungsstatus. In Orbiliq unter Konten erreichbar. Noch kein Empfang oder Versand
-von Signal-Nachrichten in Orbiliq und keine positiven Messaging-Capabilities.
+Verknüpfungsstatus. In Orbiliq unter Konten erreichbar. Die neue [Nachrichtenstrecke](docs/architecture/signal-provider.md)
+implementiert normale Direktchat-Texte und reine Gruppenanzeige hinter einer separaten
+Account-Zustimmung; die Geräteabnahme steht noch aus. Nicht unterstützte Aktionen bleiben gesperrt.
 
 [Android Foundation](docs/architecture/foundation.md),
 [Domain Model und Provider API](docs/architecture/domain-model.md),

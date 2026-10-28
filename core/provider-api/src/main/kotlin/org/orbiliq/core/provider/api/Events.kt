@@ -8,7 +8,7 @@ data class ReplayCursor(val accountId: AccountId, val streamId: String, val epoc
 }
 sealed interface ProviderEvent {
     data class MessageUpserted(val message: Message, val commandId: CommandId? = null) : ProviderEvent
-    data class MessageDeleted(val ref: MessageRef, val revision: String?) : ProviderEvent
+    data class MessageDeleted(val ref: MessageRef, val revision: String?, val commandId: CommandId? = null) : ProviderEvent
     data class ConversationChanged(val conversation: Conversation) : ProviderEvent
     data class IdentityChanged(val identity: MessengerIdentity) : ProviderEvent
     data class GroupChanged(val group: Group) : ProviderEvent

@@ -3,7 +3,7 @@ package org.orbiliq.core.provider.signal
 
 /** Separate opt-in protocol. The v1 status grant never permits these operations. */
 object SignalMessagingContract {
-    const val VERSION = 1
+    const val VERSION = 2
     const val MAX_TEXT = 4000
     const val PAGE_SIZE = 50
     const val MAX_THREADS = 1000
@@ -20,11 +20,14 @@ class SignalThread(val id: Long, val title: String, val direct: Boolean, val can
 class SignalText(
     val id: Long, val thread: Long, val sender: String, val text: String,
     val outgoing: Boolean, val timestamp: Long, val received: Long, val delivery: String,
+    val supported: Boolean = true,
+    val senderName: String = "",
 ) {
     init {
         require(id > 0 && thread > 0 && timestamp > 0 && received > 0)
-        require(text.isNotEmpty() && text.length <= SignalMessagingContract.MAX_TEXT)
+        require(if (supported) text.isNotEmpty() && text.length <= SignalMessagingContract.MAX_TEXT else text.isEmpty())
         require(sender == "self" || sender.matches(Regex("[0-9]+|service:[0-9a-f]{64}")))
+        require(senderName.length <= 512)
         require(delivery in setOf("Pending", "Sent", "Delivered", "Read", "Failed"))
     }
     override fun toString() = "SignalText(redacted)"

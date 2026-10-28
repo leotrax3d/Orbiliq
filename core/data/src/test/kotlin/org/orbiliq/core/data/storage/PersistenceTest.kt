@@ -59,6 +59,20 @@ class PersistenceTest {
         assertEquals(DeliveryState.Failed, r.snapshot().messages.single().delivery)
         assertEquals(PendingStatus.Rejected, repository().snapshot().pending.single().status)
     }
+    @Test fun `native deletion before queue response removes optimistic copy without resurrecting it`() = runTest {
+        val r = repository(); seed(r)
+        val command = command()
+        r.enqueue(command, message().copy(id = MessageId(command.id.value), direction = MessageDirection.Outgoing, ref = null))
+        r.updateOperation(command.id, PendingStatus.Dispatching)
+        val wrong = MessageRef(ConversationRef(account.id, "foreign-route"), "remote")
+        assertThrows(IllegalArgumentException::class.java) { kotlinx.coroutines.runBlocking { r.apply(event(ProviderEvent.MessageDeleted(wrong, null, command.id))) } }
+        assertEquals(1, r.snapshot().messages.size)
+        val remote = MessageRef(route, "remote")
+        r.apply(event(ProviderEvent.MessageDeleted(remote, null, command.id)))
+        r.updateOperation(command.id, PendingStatus.Accepted, receipt = "remote", remote = remote)
+        assertTrue(r.snapshot().messages.isEmpty())
+        assertTrue(repository().snapshot().messages.isEmpty())
+    }
 
     @Test fun `reopening restores projection metadata links media checkpoints and outbox`() = runTest {
         val r = repository(); seed(r)

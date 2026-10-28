@@ -77,11 +77,15 @@ class BridgeConsentActivity : Activity() {
       }
       startActivity(intent)
     }
+    layout.addView(TextView(this).apply {
+      text = "Die zusätzliche Nachrichtenfreigabe erlaubt Orbiliq, normale Direktchat- und Gruppentexte lokal verschlüsselt zu speichern und normale Direktchat-Texte zu senden. Medien sowie Einmalansicht- und verschwindende Inhalte bleiben im Companion. Die Freigabe gilt nur für diesen Account und kann hier widerrufen werden."
+      textSize = 16f
+    })
     button("Nachrichtenzugriff für diesen verknüpften Account erlauben") {
       try {
         access.approve()
         BridgeMessaging(this).approve()
-        Toast.makeText(this, "Orbiliq darf normale Direktchat-Texte lesen und senden. Verschwindende Nachrichten bleiben im Companion.", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Nachrichtenzugriff für diesen Account erlaubt.", Toast.LENGTH_LONG).show()
         setResult(RESULT_OK)
         finish()
       } catch (_: Exception) {

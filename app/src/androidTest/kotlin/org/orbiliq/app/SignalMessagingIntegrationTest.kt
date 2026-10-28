@@ -40,7 +40,7 @@ class SignalMessagingIntegrationTest {
         assertTrue(peer.binding()?.id == binding.id)
         val threads = peer.threads(binding)
         assertTrue(threads.size <= SignalMessagingContract.MAX_THREADS)
-        assertTrue(threads.all { it.direct })
+        assertTrue(threads.filterNot { it.direct }.all { !it.canSend })
         val wrong = if (binding.id == "00".repeat(32)) "11".repeat(32) else "00".repeat(32)
         val denied = context.contentResolver.call(Uri.parse("content://${SignalBridgeContract.AUTHORITY}"), "messageThreads", null,
             Bundle().apply { putInt("messageProtocolVersion", SignalMessagingContract.VERSION); putString("accountBinding", wrong) })!!
