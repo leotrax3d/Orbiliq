@@ -144,4 +144,34 @@ class SignalMessagingIntegrationTest {
         val loaded = repository.loadAttachment(sent.id, id)
         assertTrue("Document bytes differ", loaded != null && loaded.bytes.contentEquals(content))
     }
+
+    /** Opt-in, own "Notiz an mich" only: edit an own text, then delete it for everyone. */
+    @Test fun selfEditThenDeleteForEveryone() = runBlocking<Unit> {
+        assumeTrue("Explicit self-send opt-in required", args.getString("signalSelfSend") == "true")
+        val repository = EntryPointAccessors.fromApplication(context, ConversationRepositoryEntryPoint::class.java).conversations() as MessengerRepository
+        val snapshot = withTimeout(60_000) { repository.observeMessenger().first { s ->
+            s.accounts.any { account -> account.ownIdentityId != null && s.entries.any { it.route.conversation.participants == setOf(account.ownIdentityId) } }
+        } }
+        val own = snapshot.accounts.single().ownIdentityId!!
+        val route = snapshot.entries.single { it.route.conversation.participants == setOf(own) }.route
+        val target = ConversationTarget.ProviderChat(route.conversation.ref)
+        val marker = "Orbiliq Bearbeitungstest ${UUID.randomUUID()}"
+        withTimeout(60_000) { while (repository.sendRoutes(target, marker).none { it.availability is Availability.Available }) kotlinx.coroutines.delay(200) }
+        assertTrue(repository.sendText(target, route, marker) is SendTextResult.Queued)
+        val original = withTimeout(90_000) { repository.observeTimeline(target).first { t ->
+            t.messages.any { (it.content as? MessageContent.Text)?.text == marker && it.ref != null && it.delivery in setOf(DeliveryState.Sent, DeliveryState.Delivered, DeliveryState.Read) }
+        } }.messages.single { (it.content as? MessageContent.Text)?.text == marker }
+        withTimeout(60_000) { while (!repository.canEdit(original.id)) kotlinx.coroutines.delay(200) }
+        val edited = "$marker (bearbeitet)"
+        assertTrue(repository.edit(original.id, edited))
+        val revised = withTimeout(90_000) { repository.observeTimeline(target).first { t ->
+            t.messages.any { (it.content as? MessageContent.Text)?.text == edited && it.ref != null } &&
+                t.messages.none { (it.content as? MessageContent.Text)?.text == marker }
+        } }.messages.single { (it.content as? MessageContent.Text)?.text == edited }
+        withTimeout(60_000) { while (!repository.canDeleteForEveryone(revised.id)) kotlinx.coroutines.delay(200) }
+        assertTrue(repository.deleteForEveryone(revised.id))
+        withTimeout(90_000) { repository.observeTimeline(target).first { t ->
+            t.messages.none { (it.content as? MessageContent.Text)?.text?.startsWith(marker) == true }
+        } }
+    }
 }
