@@ -24,6 +24,8 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
+      - name: Signal provider JVM tests
+        run: ./gradlew --no-daemon :core:provider-signal:test
       - run: ./gradlew --no-daemon :app:assembleDebug test :app:lintDebug :app:assembleDebugAndroidTest
       - name: Enable KVM
         run: |
