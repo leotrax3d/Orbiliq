@@ -79,13 +79,16 @@ Freigegebene Capabilities (Stand `586a3c2`), jeweils nur, wenn die Strecke imple
 | `reaction.add`, `signal.reaction.receive` | eigene Reaktion setzen/ändern (idempotent); Entfernen nicht freigegeben |
 | `signal.image.receive` | JPEG/PNG/WebP/GIF bis 16 MiB, Abruf auf Tippen, nur im Speicher |
 | `message.media.image.send` | JPEG ohne Metadaten (doppelt neu kodiert) |
+| `signal.file.receive` | Sprachnachricht, Audio, Video, Dokument bis 64 MiB; Wiedergabe aus dem Speicher, Speichern nur an vom Nutzer gewählten Ort |
+| `message.media.file.send` | Dokumente unverändert (Bilder/Videos auf diesem Weg abgelehnt) |
+| `message.text.edit`, `message.remote.deleteAll` | eigene Nachrichten, Regeln/Fristen aus Signals `MessageConstraintsUtil`, vom Companion je Nachricht geprüft |
 
 Senden (Text, Antwort, Reaktion, Bild) gilt für Direktchats und für Gruppen, in denen das
 offizielle Eingabefeld schreiben ließe: aktive v2-Gruppe, Voll-/Adminmitglied,
 Ankündigungsgruppen nur für Admins, ohne Ablauftimer.
 
-Nicht freigegeben: Gruppenverwaltung, Video/Audio/Sprachnachrichten/Dateien,
-Bearbeiten, Löschen, Typing, Read-Receipt-Versand, Suche, Calls, Stories,
+Nicht freigegeben: Gruppenverwaltung, Video-Versand (Metadaten nicht sicher
+entfernbar), Aufnahme von Sprachnachrichten, Löschen nur für mich, Reaktion entfernen, Typing, Read-Receipt-Versand, Suche, Calls, Stories,
 View-once und verschwindende Inhalte (bleiben nativ). Diese Liste beschreibt die
 implementierte Adapterstrecke, nicht alle Fähigkeiten des nativen Clients.
 

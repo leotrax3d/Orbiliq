@@ -2,7 +2,18 @@
 
 Stand: 28.10.2026. Prompt 11 ist **nicht abgeschlossen**.
 
-## Neuester Fortsetzungsstand: erste Messaging-Geräteabnahme bestanden
+## Neuester Stand (28.10.2026, nach `b555ee0`)
+
+Kernfunktionen umgesetzt und auf Hardware (nur „Notiz an mich“) belegt; Details und
+offene Nachweise in `docs/PROJECT_CONTEXT.md` (Abschnitt Prompt-11-Stand). Companion
+lokal bauen: `python integrations/signal-companion/prepare.py --output build/signal-companion/<neu>
+--source-cache build/signal-companion/source`, `local.properties` mit `sdk.dir=C:/Users/...`
+(Schrägstriche!), JDK 21, `gradlew.bat --max-workers=32 :Signal-Android:assembleGithubProdSpinner`.
+Lokale Builds sind mit `~/.android/debug.keystore` signiert (Signer `50c8a5…`), nur `install -r`.
+Gerätetests: `am instrument -w -e signalSelfSend true -e signalMessaging granted -e signalDiagnose true
+-e class org.orbiliq.app.SignalMessagingIntegrationTest,org.orbiliq.app.SignalTransportDiagnosticTest,org.orbiliq.app.SignalCompanionIntegrationTest`.
+
+## Älterer Stand: erste Messaging-Geräteabnahme bestanden
 
 **Hardware-Nachweis 28.10.2026, Pixel 10a**, Companion aus Run 40717591141 (`729dfdc`,
 `verify_artifact.py` gegen eigenen Commit bestanden, lokal neu signiert, Signer
