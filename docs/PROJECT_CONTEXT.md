@@ -7,7 +7,11 @@ Zitat-Antworten, eigene Reaktionen, Bildempfang und metadatenfreien Bildversand;
 Gruppen sind nur lesbar. Hardware-nachgewiesen (Pixel 10a, echter Account): Linking,
 Session nach Neustart, verweigerte/erteilte Nachrichtenfreigabe, Fremdbindung abgewiesen,
 Text an „Notiz an mich“ genau einmal inkl. Wiederholung. Antworten, Reaktionen und
-Bilder sind JVM-getestet; ihr Gerätenachweis folgt mit dem nächsten Companion-Build.
+Bilder zusätzlich auf Hardware bestanden (lokal gebauter Companion `a52d81f`, 11,7 s):
+Antwort mit Zitatbezug, eigene Reaktion nativ bestätigt, synthetisches Bild gesendet
+und als echtes Signal-Bild wieder geladen – ausschließlich in „Notiz an mich“.
+Noch offen: Empfang von fremden Geräten, Neustart/Offline/Widerruf/Doze-Nachweis,
+Gruppenversand, Video/Audio/Dateien, Bearbeiten/Löschen.
 Details: [Signal-Provider](architecture/signal-provider.md), [Übergabe](SIGNAL_HANDOFF.md).
 
 Aktueller Entwicklungsnachtrag zu Prompt 11: Die [direkte Signal-Textstrecke](architecture/signal-provider.md)
