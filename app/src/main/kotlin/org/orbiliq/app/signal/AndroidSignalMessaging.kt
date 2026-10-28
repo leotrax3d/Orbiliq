@@ -65,7 +65,8 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
     }
     private fun decode(bundle: Bundle): List<SignalText> = rows(bundle).also { require(it.size <= SignalMessagingContract.PAGE_SIZE) }.map {
         SignalText(it.getLong("id"), it.getLong("thread"), requireNotNull(it.getString("sender")), requireNotNull(it.getString("text")),
-            it.getBoolean("outgoing"), it.getLong("timestamp"), it.getLong("received"), requireNotNull(it.getString("delivery")), it.getBoolean("supported", true), it.getString("senderName").orEmpty())
+            it.getBoolean("outgoing"), it.getLong("timestamp"), it.getLong("received"), requireNotNull(it.getString("delivery")), it.getBoolean("supported", true), it.getString("senderName").orEmpty(),
+            it.getLong("replyTo").takeIf { id -> id > 0 })
     }
     override suspend fun texts(binding: SignalBinding, thread: Long, beforeId: Long): SignalTextPage {
         val result = call("messageTexts", binding, Bundle().apply { putLong("thread", thread); putLong("beforeId", beforeId) })

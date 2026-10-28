@@ -13,8 +13,8 @@ import org.orbiliq.core.model.*
 import org.orbiliq.core.provider.api.*
 
 class SignalMessagingProviderFactory(private val transport: SignalMessagingTransport) : ProviderFactory {
-    override val descriptor = ProviderDescriptor(ProviderId("signal"), "Signal Companion", "0.2-direct-text",
-        ContractVersion(1, 0), setOf(Operations.SendText, Operations.ReceiveText, OperationKey("signal.group.title.receive")), ReplayClass.BestEffort)
+    override val descriptor = ProviderDescriptor(ProviderId("signal"), "Signal Companion", "0.3-direct-text-quotes",
+        ContractVersion(1, 0), setOf(Operations.SendText, Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive), ReplayClass.BestEffort)
     override suspend fun open(account: AccountHandle): ProviderSession {
         require(account.account.providerId == descriptor.id)
         val binding = requireNotNull(transport.binding()) { "signal.messaging.consent-required" }
@@ -66,6 +66,8 @@ class SignalMessagingSession(
     }
     companion object {
         val provider = ProviderId("signal")
+        /** Received quote references only; sending quoted replies is not implemented. */
+        val QuoteReceive = OperationKey("signal.quote.receive")
         fun accountFor(binding: SignalBinding) = Account(AccountId("signal-${binding.id}"), provider, "Signal", IdentityId("signal-${binding.id}:self"))
         private val security = SecurityContext(Encryption.EndToEnd, Verification.Unknown)
     }
@@ -94,6 +96,7 @@ class SignalMessagingSession(
         val operations = if (!ready) emptyMap() else buildMap {
             putAll(mapOf(
             Operations.ReceiveText to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
+            QuoteReceive to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             Operations.SendText to OperationSupport(if (allowed) Availability.Available(OperationConstraints(maxTextLength = SignalMessagingContract.MAX_TEXT,
                 maxBytes = SignalMessagingContract.MAX_TEXT_BYTES.toLong(), persistentOfflineQueue = true)) else Availability.Restricted(Restriction.Policy),
                 quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security),
@@ -178,7 +181,8 @@ class SignalMessagingSession(
                             if (text.supported) MessageContent.Text(text.text) else MessageContent.Unsupported(MessageType("signal.native-content"), 1, "Diesen Inhalt im Signal Companion öffnen"),
                             if (text.outgoing) MessageDirection.Outgoing else MessageDirection.Incoming,
                             Instant.ofEpochMilli(text.received), Instant.ofEpochMilli(text.timestamp), messageRef(thread.id, text.id),
-                            providerOrder = text.id.toString().padStart(20, '0'), revision = revision(text.text + text.delivery + text.supported), delivery = DeliveryState.valueOf(text.delivery),
+                            replyTo = text.replyTo?.let { MessageId("${accountId.value}:message:$it") },
+                            providerOrder = text.id.toString().padStart(20, '0'), revision = revision(text.text + text.delivery + text.supported + ":" + text.replyTo), delivery = DeliveryState.valueOf(text.delivery),
                             quality = DataQuality.PartialHistory, security = security, policy = ContentPolicy(cacheAllowed = true))
                         val command = commandMessages[message.ref]
                         revisions.remove("deleted:${text.id}")

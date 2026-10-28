@@ -276,7 +276,7 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                         modifier = Modifier.widthIn(max = 320.dp)) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             if (!outgoing && route.conversation.kind == ConversationKind.Group) Text(snapshot.identities.find { it.ref == message.sender }?.displayName ?: "Teilnehmer", style = MaterialTheme.typography.labelMedium)
-                            message.replyTo?.let { id -> Text("↳ ${messageText(timeline.messages.find { it.id == id }).take(80)}", style = MaterialTheme.typography.labelMedium) }
+                            message.replyTo?.let { id -> Text("↳ ${timeline.messages.find { it.id == id }?.let { messageText(it).take(80) } ?: "Ursprüngliche Nachricht nicht geladen"}", style = MaterialTheme.typography.labelMedium) }
                             Text(messageText(message), style = MaterialTheme.typography.bodyLarge)
                             Text("${time(message)} · ${route.providerId.value}${if (outgoing) " · ${deliveryLabel(message.delivery)}" else ""}", style = MaterialTheme.typography.labelSmall)
                             val canReply by produceState(false, route, message.ref, snapshot.syncNotice) { value = message.ref != null && model.canSend(route, "x", message.id) == true }

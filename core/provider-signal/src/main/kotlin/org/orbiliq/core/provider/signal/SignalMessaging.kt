@@ -23,6 +23,8 @@ class SignalText(
     val outgoing: Boolean, val timestamp: Long, val received: Long, val delivery: String,
     val supported: Boolean = true,
     val senderName: String = "",
+    /** Native id of the quoted original in the same thread; absent when unresolved or not exportable. */
+    val replyTo: Long? = null,
 ) {
     init {
         require(id > 0 && thread > 0 && timestamp > 0 && received > 0)
@@ -30,6 +32,7 @@ class SignalText(
         require(!supported || text.toByteArray(Charsets.UTF_8).size <= SignalMessagingContract.MAX_TEXT_BYTES)
         require(sender == "self" || sender.matches(Regex("[0-9]+|service:[0-9a-f]{64}")))
         require(senderName.length <= 512)
+        require(replyTo == null || (replyTo > 0 && replyTo != id))
         require(delivery in setOf("Pending", "Sent", "Delivered", "Read", "Failed"))
     }
     override fun toString() = "SignalText(redacted)"

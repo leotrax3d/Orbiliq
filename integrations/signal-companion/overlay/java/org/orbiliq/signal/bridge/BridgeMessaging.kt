@@ -18,6 +18,7 @@ import org.orbiliq.core.provider.signal.SignalMessagingContract
 import org.thoughtcrime.securesms.database.SignalDatabase
 import org.thoughtcrime.securesms.database.MessageTable
 import org.thoughtcrime.securesms.database.model.MessageRecord
+import org.thoughtcrime.securesms.database.model.MmsMessageRecord
 import org.thoughtcrime.securesms.keyvalue.SignalStore
 import org.thoughtcrime.securesms.mms.OutgoingMessage
 import org.thoughtcrime.securesms.service.KeyCachingService
@@ -130,11 +131,19 @@ internal class BridgeMessaging(private val context: Context) {
       else -> error("Unsupported bridge operation")
     }.apply { putInt("messageProtocolVersion", SignalMessagingContract.VERSION) }
   }
+  private fun exportable(message: MessageRecord): Boolean {
+    val recipient = SignalDatabase.threads.getRecipientForThreadId(message.threadId) ?: return false
+    return (recipient.isIndividual || recipient.isSelf || (recipient.isGroup && recipient.isActiveGroup)) && recipient.expiresInSeconds == 0 &&
+      message.isSecure && message.isLatestRevision && !message.isViewOnce && !message.isRemoteDelete && message.expiresIn == 0L && !message.isUpdate
+  }
+  /** Local id of the quoted original, only when it is itself exportable from the same thread. */
+  private fun quoted(message: MessageRecord): Long? {
+    val quote = (message as? MmsMessageRecord)?.quote?.takeIf { !it.isOriginalMissing && it.id > 0 } ?: return null
+    return SignalDatabase.messages.getMessageFor(quote.id, quote.author)
+      ?.takeIf { it.threadId == message.threadId && it.id != message.id && exportable(it) }?.id
+  }
   private fun export(message: MessageRecord): Bundle? {
-    val recipient = SignalDatabase.threads.getRecipientForThreadId(message.threadId) ?: return null
-    if ((!recipient.isIndividual && !recipient.isSelf && !(recipient.isGroup && recipient.isActiveGroup)) || recipient.expiresInSeconds != 0 ||
-        !message.isSecure || !message.isLatestRevision || message.isViewOnce || message.isRemoteDelete || message.expiresIn != 0L ||
-        message.isUpdate) return null
+    if (!exportable(message)) return null
     val supported = message.body.isNotEmpty() && message.body.length <= SignalMessagingContract.MAX_TEXT &&
       message.body.toByteArray(Charsets.UTF_8).size <= SignalServiceMessageLimits.MAX_INLINE_BODY_SIZE_BYTES &&
       SignalDatabase.attachments.getAttachmentsForMessage(message.id).all { it.quote }
@@ -144,6 +153,7 @@ internal class BridgeMessaging(private val context: Context) {
       putString("senderName", message.fromRecipient.getDisplayName(context).take(512))
       putString("text", if (supported) message.body else ""); putBoolean("supported", supported); putBoolean("outgoing", message.isOutgoing)
       putLong("timestamp", message.dateSent); putLong("received", message.dateReceived)
+      quoted(message)?.let { putLong("replyTo", it) }
       putString("delivery", when {
         message.isFailed -> "Failed"
         message.hasReadReceipt() -> "Read"

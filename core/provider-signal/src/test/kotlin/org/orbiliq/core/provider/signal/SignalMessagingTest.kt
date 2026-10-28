@@ -58,7 +58,7 @@ class SignalMessagingTest {
     @Test fun textCapabilitiesDoNotPromiseMediaGroupsHistoryOrReplies() = runBlocking {
         running(Peer(binding)) { session, _ ->
             val caps = session.observeCapabilities(scope(session)).first()
-            assertEquals(setOf(Operations.SendText, Operations.ReceiveText), caps.operations.keys)
+            assertEquals(setOf(Operations.SendText, Operations.ReceiveText, SignalMessagingSession.QuoteReceive), caps.operations.keys)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4001)) is Availability.Restricted)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2)) is Availability.Unsupported)
             assertTrue(session.evaluate(OperationRequest(CapabilityScope.Conversation(ProviderId("signal"), ConversationRef(session.accountId, "unknown")), Operations.SendText, textLength = 2)) is Availability.Unsupported)
@@ -148,6 +148,24 @@ class SignalMessagingTest {
         running(peer) { _, events ->
             assertTrue(events.mapNotNull { (it.payload as? ProviderEvent.MessageUpserted)?.message }.single().content is MessageContent.Unsupported)
         }
+    }
+    @Test fun receivedQuoteReferencesTheOriginalButReplySendingStaysUnsupported() = runBlocking {
+        val peer = Peer(binding).apply {
+            rows[11] = text()
+            rows[12] = SignalText(12, 7, "self", "reply fixture", true, now.toEpochMilli(), now.toEpochMilli(), "Sent", replyTo = 11)
+        }
+        running(peer) { session, events ->
+            val messages = events.mapNotNull { (it.payload as? ProviderEvent.MessageUpserted)?.message }
+            val original = messages.single { it.ref?.remoteMessageId == "11" }
+            assertEquals(original.id, messages.single { it.ref?.remoteMessageId == "12" }.replyTo)
+            assertEquals(null, original.replyTo)
+            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2)) is Availability.Unsupported)
+            assertTrue(session.execute(command(session, CommandPayload.SendText("hi", MessageRef(scope(session).ref, "11")))) is DispatchResult.Rejected)
+            assertEquals(0, peer.sendCalls)
+        }
+    }
+    @Test fun quoteMayNotReferenceItself() {
+        assertThrows(IllegalArgumentException::class.java) { SignalText(5, 7, "9", "x", false, 1, 1, "Sent", replyTo = 5) }
     }
     @Test fun factoryRequiresExactCurrentAccountAndBindingReference() = runBlocking<Unit> {
         val peer = Peer(binding)
