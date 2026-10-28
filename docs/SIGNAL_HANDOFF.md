@@ -4,9 +4,17 @@ Stand: 28.10.2026. Prompt 11 ist **nicht abgeschlossen**.
 
 ## Neuester Fortsetzungsstand: Nachrichtenadapter implementiert, Geräteabnahme offen
 
-Aktueller korrigierter Companion-Lauf: **[40714064220](https://github.com/leotrax3d/Orbiliq/actions/runs/40714064220)**,
-Codecommit `704c286`. Zuletzt noch laufend, Ergebnis prüfen. Alle bisherigen Code-
-und Teständerungen sind auf `codex/signal-completion` gepusht.
+Aktueller Companion-Lauf: **[40717591141](https://github.com/leotrax3d/Orbiliq/actions/runs/40717591141)**,
+Commit `729dfdc` (zusätzlich empfangene Zitat-Antworten). Vorheriger Lauf
+[40714064220](https://github.com/leotrax3d/Orbiliq/actions/runs/40714064220) (`704c286`)
+enthält diese noch nicht. Ergebnisse prüfen; vor Installation
+`verify_artifact.py <source.tar.gz>` gegen den aktuellen Generator ausführen.
+
+Neu (`729dfdc`, nur JVM-getestet): Empfangene Zitat-Antworten. Native löst
+Quote-Zeitstempel+Autor nur zu exportierbaren Nachrichten desselben Threads auf
+(nie zu View-once/Ablauf/gelöschten); Provider setzt `Message.replyTo` und meldet
+`signal.quote.receive`. **Antworten senden bleibt nicht unterstützt** (Reply-Command
+wird vor dem Transport abgelehnt). Reaktionen: noch nicht, UI zeigt sie nicht an.
 
 **Für die nächste Agentenübernahme zuerst den vollständigen
 [Übergabeprompt](SIGNAL_NEXT_AGENT_PROMPT.md) lesen.** Nutzer verlangt explizit,
