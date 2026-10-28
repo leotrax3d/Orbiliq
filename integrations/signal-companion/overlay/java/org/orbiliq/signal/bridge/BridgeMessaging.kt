@@ -15,6 +15,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import org.json.JSONObject
 import org.orbiliq.core.provider.signal.SignalMessagingContract
+import org.thoughtcrime.securesms.attachments.DatabaseAttachment
+import org.thoughtcrime.securesms.database.AttachmentTable
 import org.thoughtcrime.securesms.database.SignalDatabase
 import org.thoughtcrime.securesms.database.MessageTable
 import org.thoughtcrime.securesms.database.model.MessageId
@@ -131,8 +133,42 @@ internal class BridgeMessaging(private val context: Context) {
       }
       "messageSend", "messageReconcile" -> send(binding, method, extras)
       "messageReact" -> react(extras)
+      "messageImage" -> image(extras)
       else -> error("Unsupported bridge operation")
     }.apply { putInt("messageProtocolVersion", SignalMessagingContract.VERSION) }
+  }
+  private fun shareableImage(attachment: DatabaseAttachment): Boolean =
+    attachment.contentType in SignalMessagingContract.IMAGE_TYPES && attachment.transferState == AttachmentTable.TRANSFER_PROGRESS_DONE &&
+      attachment.size in 1..SignalMessagingContract.MAX_IMAGE_BYTES
+  /** Streams one decrypted image of an exportable message through a pipe; nothing is written to disk. */
+  private fun image(extras: Bundle): Bundle {
+    val thread = extras.getLong("thread")
+    val id = extras.getLong("message")
+    val attachmentId = extras.getLong("attachment")
+    require(thread > 0 && id > 0 && attachmentId > 0)
+    val message = SignalDatabase.messages.getMessageRecordOrNull(id)
+    check(message != null && message.threadId == thread && exportable(message))
+    val attachment = SignalDatabase.attachments.getAttachmentsForMessage(id).single { !it.quote && it.attachmentId.id == attachmentId }
+    check(shareableImage(attachment))
+    val pipe = android.os.ParcelFileDescriptor.createPipe()
+    Thread {
+      try {
+        android.os.ParcelFileDescriptor.AutoCloseOutputStream(pipe[1]).use { out ->
+          SignalDatabase.attachments.getAttachmentStream(attachment.attachmentId, 0).use { input ->
+            val buffer = ByteArray(64 * 1024)
+            var total = 0L
+            while (true) {
+              val read = input.read(buffer)
+              if (read < 0) break
+              total += read
+              check(total <= SignalMessagingContract.MAX_IMAGE_BYTES)
+              out.write(buffer, 0, read)
+            }
+          }
+        }
+      } catch (_: Exception) { try { pipe[1].closeWithError("unavailable") } catch (_: Exception) {} }
+    }.start()
+    return Bundle().apply { putParcelable("stream", pipe[0]); putString("mimeType", attachment.contentType) }
   }
   private fun exportable(message: MessageRecord): Boolean {
     val recipient = SignalDatabase.threads.getRecipientForThreadId(message.threadId) ?: return false
@@ -147,9 +183,13 @@ internal class BridgeMessaging(private val context: Context) {
   }
   private fun export(message: MessageRecord): Bundle? {
     if (!exportable(message)) return null
-    val supported = message.body.isNotEmpty() && message.body.length <= SignalMessagingContract.MAX_TEXT &&
-      message.body.toByteArray(Charsets.UTF_8).size <= SignalServiceMessageLimits.MAX_INLINE_BODY_SIZE_BYTES &&
-      SignalDatabase.attachments.getAttachmentsForMessage(message.id).all { it.quote }
+    val media = SignalDatabase.attachments.getAttachmentsForMessage(message.id).filter { !it.quote }
+    val images = media.filter(::shareableImage)
+    val bodyOk = message.body.length <= SignalMessagingContract.MAX_TEXT &&
+      message.body.toByteArray(Charsets.UTF_8).size <= SignalServiceMessageLimits.MAX_INLINE_BODY_SIZE_BYTES
+    // Any other attachment (video, voice, file, unfinished download) keeps the whole message native-only.
+    val supported = bodyOk && images.size == media.size && images.size <= SignalMessagingContract.MAX_IMAGES &&
+      (message.body.isNotEmpty() || images.isNotEmpty())
     return Bundle().apply {
       putLong("id", message.id); putLong("thread", message.threadId)
       putString("sender", identity(message.fromRecipient))
@@ -157,6 +197,11 @@ internal class BridgeMessaging(private val context: Context) {
       putString("text", if (supported) message.body else ""); putBoolean("supported", supported); putBoolean("outgoing", message.isOutgoing)
       putLong("timestamp", message.dateSent); putLong("received", message.dateReceived)
       quoted(message)?.let { putLong("replyTo", it) }
+      if (supported) {
+        putLongArray("imageIds", images.map { it.attachmentId.id }.toLongArray())
+        putStringArrayList("imageTypes", ArrayList(images.map { requireNotNull(it.contentType) }))
+        putLongArray("imageSizes", images.map { it.size }.toLongArray())
+      }
       val reactions = SignalDatabase.reactions.getReactions(MessageId(message.id)).take(SignalMessagingContract.MAX_REACTIONS)
       putStringArrayList("reactionEmoji", ArrayList(reactions.map { it.emoji }))
       putStringArrayList("reactionActor", ArrayList(reactions.map { identity(Recipient.resolved(it.author)) }))

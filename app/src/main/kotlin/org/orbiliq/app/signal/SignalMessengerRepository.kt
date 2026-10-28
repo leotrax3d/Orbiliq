@@ -97,6 +97,13 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
         check(route.conversation.ref.accountId == account.value)
         communication().sendText(target, route, text, replyTo)
     }
+    override suspend fun loadImage(message: MessageId, attachment: AttachmentId) = withContext(Dispatchers.IO) {
+        val active = account.value ?: return@withContext null
+        val stored = ready.await().snapshot().messages.find { it.id == message && it.route.accountId == active } ?: return@withContext null
+        val ref = stored.ref ?: return@withContext null
+        if ((stored.content as? MessageContent.Media)?.attachments?.contains(attachment) != true) return@withContext null
+        session?.image(ref, attachment)
+    }
     override suspend fun canReact(message: MessageId) = withContext(Dispatchers.IO) { account.value != null && communication().canReact(message) }
     override suspend fun react(message: MessageId, emoji: String) = withContext(Dispatchers.IO) {
         val active = account.value ?: return@withContext false

@@ -14,7 +14,7 @@ import org.orbiliq.core.provider.api.*
 
 class SignalMessagingProviderFactory(private val transport: SignalMessagingTransport) : ProviderFactory {
     override val descriptor = ProviderDescriptor(ProviderId("signal"), "Signal Companion", "0.3-direct-text-quotes",
-        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive), ReplayClass.BestEffort)
+        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive), ReplayClass.BestEffort)
     override suspend fun open(account: AccountHandle): ProviderSession {
         require(account.account.providerId == descriptor.id)
         val binding = requireNotNull(transport.binding()) { "signal.messaging.consent-required" }
@@ -74,6 +74,9 @@ class SignalMessagingSession(
         val QuoteReceive = OperationKey("signal.quote.receive")
         /** Received reactions only; sending reactions is not implemented. */
         val ReactionReceive = OperationKey("signal.reaction.receive")
+        /** Images are fetched on demand from the companion and decoded in memory only. */
+        val ImageReceive = OperationKey("signal.image.receive")
+        fun attachmentId(account: AccountId, image: Long) = AttachmentId("${account.value}:image:$image")
         fun accountFor(binding: SignalBinding) = Account(AccountId("signal-${binding.id}"), provider, "Signal", IdentityId("signal-${binding.id}:self"))
         private val security = SecurityContext(Encryption.EndToEnd, Verification.Unknown)
     }
@@ -102,6 +105,8 @@ class SignalMessagingSession(
         val operations = if (!ready) emptyMap() else buildMap {
             putAll(mapOf(
             Operations.ReceiveText to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
+            ImageReceive to OperationSupport(Availability.Available(OperationConstraints(maxBytes = SignalMessagingContract.MAX_IMAGE_BYTES,
+                mimeTypes = SignalMessagingContract.IMAGE_TYPES)), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             ReactionReceive to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             QuoteReceive to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             Operations.SendText to sendSupport(allowed),
@@ -189,11 +194,12 @@ class SignalMessagingSession(
                         event(ProviderEvent.IdentityChanged(MessengerIdentity(identityId(sender.remoteIdentityId), sender,
                             senderName)), "sender:${text.sender}", revision(senderName))
                         val message = Message(MessageId("${accountId.value}:message:${text.id}"), conversationId(thread.id), conversation(thread.id), sender,
-                            if (text.supported) MessageContent.Text(text.text) else MessageContent.Unsupported(MessageType("signal.native-content"), 1, "Diesen Inhalt im Signal Companion öffnen"),
+                            if (text.supported && text.images.isNotEmpty()) MessageContent.Media(text.images.map { attachmentId(accountId, it.id) }, text.text.ifEmpty { null })
+                            else if (text.supported) MessageContent.Text(text.text) else MessageContent.Unsupported(MessageType("signal.native-content"), 1, "Diesen Inhalt im Signal Companion öffnen"),
                             if (text.outgoing) MessageDirection.Outgoing else MessageDirection.Incoming,
                             Instant.ofEpochMilli(text.received), Instant.ofEpochMilli(text.timestamp), messageRef(thread.id, text.id),
                             replyTo = text.replyTo?.let { MessageId("${accountId.value}:message:$it") },
-                            providerOrder = text.id.toString().padStart(20, '0'), revision = revision(text.text + text.delivery + text.supported + ":" + text.replyTo), delivery = DeliveryState.valueOf(text.delivery),
+                            providerOrder = text.id.toString().padStart(20, '0'), revision = revision(text.text + text.delivery + text.supported + ":" + text.replyTo + ":" + text.images.joinToString { "${it.id}" }), delivery = DeliveryState.valueOf(text.delivery),
                             quality = DataQuality.PartialHistory, security = security, policy = ContentPolicy(cacheAllowed = true))
                         val command = commandMessages[message.ref]
                         revisions.remove("deleted:${text.id}")
@@ -300,6 +306,19 @@ class SignalMessagingSession(
             }
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { ReconcileResult.StillUnknown }
+    }
+    /** On-demand image bytes for an exported message of this account, or null. */
+    suspend fun image(message: MessageRef, attachment: AttachmentId): ByteArray? {
+        if (!job.isActive || message.conversation.accountId != accountId) return null
+        val prefix = "${accountId.value}:image:"
+        val image = attachment.value.takeIf { it.startsWith(prefix) }?.removePrefix(prefix)?.toLongOrNull() ?: return null
+        val thread = message.conversation.remoteConversationId.toLongOrNull() ?: return null
+        val id = message.remoteMessageId.toLongOrNull() ?: return null
+        return try {
+            check(transport.binding()?.id == binding.id)
+            sendGate.withLock { transport.image(binding, thread, id, image) }
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { null }
     }
     override suspend fun authenticate(response: AuthResponse): AuthResult = AuthResult.Rejected(ProviderFailure(FailureCategory.AuthRequired))
     override suspend fun close() { job.cancel(); stateValue.value = ProviderState(AuthState.Blocked, ConnectionState.Offline, SyncState.Degraded) }

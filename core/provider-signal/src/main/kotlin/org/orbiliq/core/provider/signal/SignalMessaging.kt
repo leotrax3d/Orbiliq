@@ -9,6 +9,9 @@ object SignalMessagingContract {
     const val PAGE_SIZE = 50
     const val MAX_THREADS = 1000
     const val MAX_REACTIONS = 64
+    const val MAX_IMAGES = 10
+    const val MAX_IMAGE_BYTES = 16L * 1024 * 1024
+    val IMAGE_TYPES = setOf("image/jpeg", "image/png", "image/webp", "image/gif")
 }
 
 class SignalBinding(val id: String) {
@@ -27,10 +30,12 @@ class SignalText(
     /** Native id of the quoted original in the same thread; absent when unresolved or not exportable. */
     val replyTo: Long? = null,
     val reactions: List<SignalReaction> = emptyList(),
+    val images: List<SignalImage> = emptyList(),
 ) {
     init {
         require(id > 0 && thread > 0 && timestamp > 0 && received > 0)
-        require(if (supported) text.isNotEmpty() && text.length <= SignalMessagingContract.MAX_TEXT else text.isEmpty())
+        require(if (supported) (text.isNotEmpty() || images.isNotEmpty()) && text.length <= SignalMessagingContract.MAX_TEXT else text.isEmpty() && images.isEmpty())
+        require(images.size <= SignalMessagingContract.MAX_IMAGES && images.map { it.id }.distinct().size == images.size)
         require(!supported || text.toByteArray(Charsets.UTF_8).size <= SignalMessagingContract.MAX_TEXT_BYTES)
         require(sender == "self" || sender.matches(Regex("[0-9]+|service:[0-9a-f]{64}")))
         require(senderName.length <= 512)
@@ -39,6 +44,11 @@ class SignalText(
         require(delivery in setOf("Pending", "Sent", "Delivered", "Read", "Failed"))
     }
     override fun toString() = "SignalText(redacted)"
+}
+/** Metadata only; bytes are streamed on explicit demand and never cached by the provider. */
+class SignalImage(val id: Long, val mimeType: String, val sizeBytes: Long) {
+    init { require(id > 0 && mimeType in SignalMessagingContract.IMAGE_TYPES && sizeBytes in 1..SignalMessagingContract.MAX_IMAGE_BYTES) }
+    override fun toString() = "SignalImage(redacted)"
 }
 /** Signal permits one reaction per actor and message. */
 class SignalReaction(val actor: String, val emoji: String) {
@@ -65,4 +75,6 @@ interface SignalMessagingTransport {
     suspend fun reconcileText(binding: SignalBinding, commandId: String, thread: Long): SignalSendResult
     /** Sets the own reaction (idempotent: an identical existing reaction is not resent). */
     suspend fun react(binding: SignalBinding, thread: Long, message: Long, emoji: String): SignalSendResult = SignalSendResult.Rejected
+    /** Decrypted image bytes of one exportable message, bounded by [SignalMessagingContract.MAX_IMAGE_BYTES]. */
+    suspend fun image(binding: SignalBinding, thread: Long, message: Long, attachment: Long): ByteArray? = null
 }

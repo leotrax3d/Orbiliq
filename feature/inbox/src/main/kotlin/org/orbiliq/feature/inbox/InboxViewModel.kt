@@ -47,6 +47,9 @@ class InboxViewModel(repository: ConversationRepository) : ViewModel() {
         }
     } catch (c: CancellationException) { throw c }
       catch (_: Exception) { _notice.value = "Nachricht konnte nicht gespeichert werden. Bitte erneut versuchen."; false }
+    suspend fun loadImage(message: MessageId, attachment: AttachmentId): ByteArray? = try { messenger?.loadImage(message, attachment) }
+        catch (c: CancellationException) { throw c }
+        catch (_: Exception) { null }
     suspend fun canReact(message: MessageId): Boolean = try { messenger?.canReact(message) == true }
         catch (c: CancellationException) { throw c }
         catch (_: Exception) { false }

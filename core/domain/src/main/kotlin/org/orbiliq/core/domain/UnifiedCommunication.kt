@@ -31,4 +31,6 @@ interface UnifiedCommunication {
     suspend fun canReact(message: MessageId): Boolean = false
     /** Queues a reaction in the durable outbox; true means queued, not delivered. */
     suspend fun react(message: MessageId, emoji: String): Boolean = false
+    /** Image bytes for display only (never persisted by Orbiliq); null when unavailable. */
+    suspend fun loadImage(message: MessageId, attachment: AttachmentId): ByteArray? = null
 }

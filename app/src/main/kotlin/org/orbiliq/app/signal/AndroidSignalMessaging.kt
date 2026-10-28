@@ -63,6 +63,29 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
         } while (true)
         return result
     }
+    private fun images(row: Bundle): List<SignalImage> {
+        val ids = row.getLongArray("imageIds") ?: return emptyList()
+        val types = requireNotNull(row.getStringArrayList("imageTypes"))
+        val sizes = requireNotNull(row.getLongArray("imageSizes"))
+        require(ids.size == types.size && ids.size == sizes.size)
+        return ids.indices.map { SignalImage(ids[it], types[it], sizes[it]) }
+    }
+    @Suppress("DEPRECATION")
+    override suspend fun image(binding: SignalBinding, thread: Long, message: Long, attachment: Long): ByteArray? = withContext(Dispatchers.IO) {
+        val result = call("messageImage", binding, Bundle().apply { putLong("thread", thread); putLong("message", message); putLong("attachment", attachment) })
+        val stream = requireNotNull(result.getParcelable<android.os.ParcelFileDescriptor>("stream"))
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(stream).use { input ->
+            val out = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                out.write(buffer, 0, read)
+                check(out.size() <= SignalMessagingContract.MAX_IMAGE_BYTES)
+            }
+            out.toByteArray().takeIf { it.isNotEmpty() }
+        }
+    }
     private fun reactions(row: Bundle): List<SignalReaction> {
         val emoji = row.getStringArrayList("reactionEmoji").orEmpty()
         val actors = row.getStringArrayList("reactionActor").orEmpty()
@@ -72,7 +95,7 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
     private fun decode(bundle: Bundle): List<SignalText> = rows(bundle).also { require(it.size <= SignalMessagingContract.PAGE_SIZE) }.map {
         SignalText(it.getLong("id"), it.getLong("thread"), requireNotNull(it.getString("sender")), requireNotNull(it.getString("text")),
             it.getBoolean("outgoing"), it.getLong("timestamp"), it.getLong("received"), requireNotNull(it.getString("delivery")), it.getBoolean("supported", true), it.getString("senderName").orEmpty(),
-            it.getLong("replyTo").takeIf { id -> id > 0 }, reactions(it))
+            it.getLong("replyTo").takeIf { id -> id > 0 }, reactions(it), images(it))
     }
     override suspend fun texts(binding: SignalBinding, thread: Long, beforeId: Long): SignalTextPage {
         val result = call("messageTexts", binding, Bundle().apply { putLong("thread", thread); putLong("beforeId", beforeId) })

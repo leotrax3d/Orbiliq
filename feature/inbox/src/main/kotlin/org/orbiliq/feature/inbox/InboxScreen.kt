@@ -26,6 +26,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
@@ -201,7 +202,7 @@ private fun ChatRow(entry: UnifiedInboxEntry, modifier: Modifier = Modifier, cli
 }
 internal fun messageText(message: Message?): String = when (val c = message?.content) {
     is MessageContent.Text -> c.text
-    is MessageContent.Media -> c.caption ?: "Medienanhang · Vorschau nicht verfügbar"
+    is MessageContent.Media -> c.caption ?: "Bild"
     is MessageContent.Service -> "Systemnachricht: ${c.code}"
     is MessageContent.Unsupported -> c.description
     null -> ""
@@ -277,7 +278,9 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             if (!outgoing && route.conversation.kind == ConversationKind.Group) Text(snapshot.identities.find { it.ref == message.sender }?.displayName ?: "Teilnehmer", style = MaterialTheme.typography.labelMedium)
                             message.replyTo?.let { id -> Text("↳ ${timeline.messages.find { it.id == id }?.let { messageText(it).take(80) } ?: "Ursprüngliche Nachricht nicht geladen"}", style = MaterialTheme.typography.labelMedium) }
-                            Text(messageText(message), style = MaterialTheme.typography.bodyLarge)
+                            (message.content as? MessageContent.Media)?.let { media -> media.attachments.forEach { id -> ImageAttachment(model, message.id, id) } }
+                            if (message.content !is MessageContent.Media || (message.content as MessageContent.Media).caption != null)
+                                Text(messageText(message), style = MaterialTheme.typography.bodyLarge)
                             timeline.reactions[message.id]?.takeIf { it.isNotEmpty() }?.let { counts ->
                                 Text(counts.entries.sortedByDescending { it.value }.joinToString("  ") { (emoji, n) -> if (n > 1) "$emoji $n" else emoji },
                                     style = MaterialTheme.typography.labelLarge,
@@ -411,5 +414,24 @@ private fun SettingsScreen(appearance: String, dynamic: Boolean, setAppearance: 
         item { Text("Nachrichten bleiben lokal verschlüsselt gespeichert. Keine Orbiliq-Cloud, keine Tracker. App-Lock und automatische Aufbewahrungsregeln sind noch nicht eingerichtet.", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodyLarge) }
         item { Label("ÜBER ORBILIQ") }
         item { Text("Material 3 Expressive · Orbiliq\nEigener App-Code: Open Source · MIT. Der separate Signal-Companion enthält AGPL-Code.\nBewegungen folgen der systemweiten Animationseinstellung.", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodyMedium) }
+    }
+}
+
+/** Loads on explicit tap and keeps the decoded image only in memory for this composition. */
+@Composable
+private fun ImageAttachment(model: InboxViewModel, message: MessageId, attachment: AttachmentId) {
+    var requested by remember(attachment) { mutableStateOf(false) }
+    val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, requested, attachment) {
+        if (requested) value = model.loadImage(message, attachment)?.let { bytes ->
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        }
+    }
+    val current = image
+    when {
+        current != null -> androidx.compose.foundation.Image(current, contentDescription = "Bild",
+            modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).clip(RoundedCornerShape(16.dp)),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+        requested -> Text("Bild wird geladen \u2026", style = MaterialTheme.typography.labelMedium)
+        else -> TextButton(onClick = { requested = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Bild laden") }
     }
 }

@@ -34,6 +34,11 @@ class SignalMessagingTest {
             sendCalls++; lastReplyTo = replyTo
             return if (unknown) SignalSendResult.Unknown else SignalSendResult.Queued(22)
         }
+        var imageCalls = 0
+        override suspend fun image(binding: SignalBinding, thread: Long, message: Long, attachment: Long): ByteArray? {
+            imageCalls++
+            return if (rows[message]?.images?.any { it.id == attachment } == true) byteArrayOf(1, 2, 3) else null
+        }
         var reactCalls = 0
         override suspend fun react(binding: SignalBinding, thread: Long, message: Long, emoji: String): SignalSendResult {
             reactCalls++
@@ -67,7 +72,7 @@ class SignalMessagingTest {
     @Test fun textCapabilitiesDoNotPromiseMediaGroupSendingOrHistory() = runBlocking {
         running(Peer(binding)) { session, _ ->
             val caps = session.observeCapabilities(scope(session)).first()
-            assertEquals(setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.ReceiveText, SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive), caps.operations.keys)
+            assertEquals(setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.ReceiveText, SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive), caps.operations.keys)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.React)) is Availability.Available)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4001)) is Availability.Restricted)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2, sizeBytes = 2)) is Availability.Available)
@@ -221,6 +226,26 @@ class SignalMessagingTest {
             val messageScope = CapabilityScope.Message(ProviderId("signal"), MessageRef(scope(session).ref, "11"))
             assertTrue(session.evaluate(OperationRequest(messageScope, Operations.React)) !is Availability.Available)
         }
+    }
+    @Test fun imagesBecomeMediaWithCaptionAndAreFetchedOnlyOnDemandForTheirOwnMessage() = runBlocking {
+        val peer = Peer(binding).apply {
+            rows[11] = SignalText(11, 7, "9", "caption", false, 1, 1, "Sent", images = listOf(SignalImage(5, "image/jpeg", 3)))
+        }
+        running(peer) { session, events ->
+            val message = events.mapNotNull { (it.payload as? ProviderEvent.MessageUpserted)?.message }.single()
+            val media = message.content as MessageContent.Media
+            assertEquals("caption", media.caption)
+            assertEquals(0, peer.imageCalls)
+            assertArrayEquals(byteArrayOf(1, 2, 3), session.image(message.ref!!, media.attachments.single()))
+            assertNull(session.image(message.ref!!, AttachmentId("foreign:image:5")))
+            assertNull(session.image(MessageRef(ConversationRef(AccountId("other"), "7"), "11"), media.attachments.single()))
+            assertEquals(1, peer.imageCalls)
+        }
+    }
+    @Test fun imageContractRejectsUnsupportedTypesAndOversize() {
+        assertThrows(IllegalArgumentException::class.java) { SignalImage(1, "video/mp4", 10) }
+        assertThrows(IllegalArgumentException::class.java) { SignalImage(1, "image/png", SignalMessagingContract.MAX_IMAGE_BYTES + 1) }
+        assertThrows(IllegalArgumentException::class.java) { SignalText(1, 7, "9", "", false, 1, 1, "Sent", supported = false, images = listOf(SignalImage(1, "image/png", 1))) }
     }
     @Test fun quoteMayNotReferenceItself() {
         assertThrows(IllegalArgumentException::class.java) { SignalText(5, 7, "9", "x", false, 1, 1, "Sent", replyTo = 5) }
