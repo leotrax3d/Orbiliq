@@ -55,7 +55,7 @@ class PersistentMockRepository(
             val latest = s.messages.groupBy { it.route }.mapValues { it.value.maxWith(Message.timelineOrder) }
             MessengerSnapshot(s.conversations.mapNotNull { c ->
                 s.accounts.find { it.id == c.ref.accountId }?.let { UnifiedInboxEntry(SendRoute(it.providerId, c), latest[c.ref]) }
-            }.sortedByDescending { it.latestMessage?.displayTime }, s.people, s.identities, s.links, s.accounts, s.archived)
+            }.sortedByDescending { it.latestMessage?.displayTime }, s.people, s.identities, s.links, s.accounts, s.archived, simulation = true)
         })
     }.flowOn(Dispatchers.IO)
     override fun observeUnifiedInbox(): Flow<List<UnifiedInboxEntry>> = flow { emitAll(communication().observeUnifiedInbox()) }.flowOn(Dispatchers.IO)

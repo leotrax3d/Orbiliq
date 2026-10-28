@@ -349,23 +349,23 @@ private fun AccountsScreen(snapshot: MessengerSnapshot, settings: () -> Unit) {
     var accountId by rememberSaveable { mutableStateOf<String?>(null) }
     LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { FilledTonalButton(onClick = settings, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Darstellung & Einstellungen") } }
-        item { Label("VERBUNDEN · LOKALE SIMULATION") }
+        item { Label(if (snapshot.simulation) "VERBUNDEN · LOKALE SIMULATION" else "LOKAL FREIGEGEBENE KONTEN") }
         items(snapshot.accounts, key = { it.id.value }) { account ->
             Surface(onClick = { accountId = account.id.value }, shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(account.displayName, style = MaterialTheme.typography.titleLarge)
-                    Text("Mock Provider · lokal auf diesem Gerät", style = MaterialTheme.typography.bodyLarge)
+                    Text(if (snapshot.simulation) "Mock Provider · lokal auf diesem Gerät" else "${account.providerId.value} · lokaler Companion", style = MaterialTheme.typography.bodyLarge)
                     Text("Kontodetails öffnen", color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
-        item { Text("Signal, WhatsApp, Telegram und Threema sind noch nicht verbunden. Dieses Build verwendet ausschließlich synthetische Mock-Daten.", style = MaterialTheme.typography.bodyMedium) }
+        item { Text(if (snapshot.simulation) "Dieses Build verwendet ausschließlich synthetische Mock-Daten." else "Verknüpfe den Companion und erteile dort den Nachrichtenzugriff. Der aktuelle Signal-Adapter übernimmt normale Direktchat-Texte; ältere Historie, Gruppen, Medien und verschwindende Inhalte sind hier noch nicht verfügbar.", style = MaterialTheme.typography.bodyMedium) }
     }
     snapshot.accounts.find { it.id.value == accountId }?.let { account -> ModalBottomSheet(onDismissRequest = { accountId = null }) {
         Column(Modifier.padding(24.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(account.displayName, style = MaterialTheme.typography.headlineMedium)
             Text("Provider: ${account.providerId.value}\n${snapshot.entries.count { it.route.conversation.ref.accountId == account.id }} Unterhaltungen")
-            Text("Textnachrichten und Antworten laufen über die persistente lokale Outbox. Medieninhalte sind in dieser Oberfläche noch nicht abspielbar. Es besteht keine Verbindung zu einem echten Messenger.")
+            Text(if (snapshot.simulation) "Lokale Simulation. Es besteht keine Verbindung zu einem echten Messenger." else "Verfügbare Aktionen werden vom Provider geprüft. Ein lokaler Versandauftrag bestätigt noch keine Zustellung. Medien und geschützte Inhalte bleiben im Companion.")
         }
     } }
 }

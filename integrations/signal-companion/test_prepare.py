@@ -44,8 +44,8 @@ class RegistrationGeneratorTest(unittest.TestCase):
         block_primary_registration(self.root)
         text = (self.root / INPUTS[3]).read_text()
         validation = text[text.index("  private suspend fun validateRestoredState("):]
-        self.assertLess(validation.index("!CompanionRegistrationPolicy.allows(it)"),
-                        validation.index("repository.validateSession("))
+        self.assertIn("!CompanionRegistrationPolicy.allows(it)", validation)
+        self.assertNotIn("repository.validateSession(", validation)
         self.assertIn("state.backStack.isEmpty()", validation)
         self.assertIn("state.sessionMetadata != null", validation)
         for method in ("applyNavigationToScreenEvent", "applyNavigateBackToScreenEvent"):

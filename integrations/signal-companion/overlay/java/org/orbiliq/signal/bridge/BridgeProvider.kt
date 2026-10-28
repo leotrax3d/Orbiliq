@@ -19,6 +19,10 @@ class BridgeProvider : ContentProvider() {
     val ctx = requireNotNull(context)
     val access = BridgeAccess(ctx)
     access.enforceCaller()
+    if (method in setOf("messageSession", "messageThreads", "messageTexts", "messageLookup", "messageSend", "messageReconcile")) {
+      return try { BridgeMessaging(ctx).call(method, requireNotNull(extras)) }
+      catch (_: Exception) { Bundle().apply { putString("error", "Unavailable") } }
+    }
     if (extras?.getInt("protocolVersion", -1) != SignalBridgeContract.VERSION) {
       return status(SignalLinkState.UpdateRequired)
     }
@@ -32,7 +36,7 @@ class BridgeProvider : ContentProvider() {
         SignalStore.account.isPrimaryDevice -> SignalLinkState.PrimaryDeviceNotSupported
         else -> SignalLinkState.Linked
       })
-      "revoke" -> { access.revoke(); status(if (access.hasConsent()) SignalLinkState.Unavailable else SignalLinkState.ConsentRequired) }
+      "revoke" -> { BridgeMessaging(ctx).revoke(); access.revoke(); status(if (access.hasConsent()) SignalLinkState.Unavailable else SignalLinkState.ConsentRequired) }
       else -> throw IllegalArgumentException("Unsupported bridge operation")
     } } catch (_: Exception) { status(SignalLinkState.Unavailable) }
   }

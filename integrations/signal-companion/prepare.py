@@ -28,6 +28,11 @@ SECURITY_FILES = (
     "feature/registration/src/main/java/org/signal/registration/CompanionRegistrationPolicy.kt",
     "lib/network/src/main/java/org/signal/network/api/RegistrationApiV2.kt",
     "lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/registration/RegistrationApi.kt",
+    "app/src/main/java/org/orbiliq/signal/bridge/BridgeMessaging.kt",
+    "app/src/main/java/org/orbiliq/signal/bridge/BridgeProvider.kt",
+    "app/src/main/java/org/orbiliq/signal/bridge/BridgeConsentActivity.kt",
+    "app/src/main/java/org/orbiliq/core/provider/signal/SignalMessaging.kt",
+    "app/src/main/java/org/thoughtcrime/securesms/database/MessageTable.kt",
 )
 
 
@@ -98,10 +103,19 @@ def block_primary_registration(checkout: Path):
     old = "  private suspend fun validateRestoredState(state: RegistrationFlowState): RegistrationFlowState {\n"
     if text.count(old) != 1:
         raise RuntimeError("Upstream registration restoration validation changed")
-    text = text.replace(old, old + """    if (state.backStack.isEmpty() || state.backStack.any { !CompanionRegistrationPolicy.allows(it) } || state.sessionMetadata != null) {
-      return RegistrationFlowState(backStack = listOf(RegistrationRoute.LinkAccount(showCreateAccount = false)), isRestoringNavigationState = false)
+    # Replace the complete legacy verifier: linked provisioning has no primary
+    # verification session. Keeping its now-unreachable code breaks Kotlin's
+    # smart-cast/type inference and could reintroduce primary network validation.
+    pattern = re.escape(old) + r"[\s\S]*?\n  }"
+    replacement = old + """    return if (state.backStack.isEmpty() || state.backStack.any { !CompanionRegistrationPolicy.allows(it) } || state.sessionMetadata != null) {
+      RegistrationFlowState(backStack = listOf(RegistrationRoute.LinkAccount(showCreateAccount = false)), isRestoringNavigationState = false)
+    } else {
+      state
     }
-""")
+  }"""
+    text, count = re.subn(pattern, lambda _: replacement, text)
+    if count != 1:
+        raise RuntimeError("Upstream registration restoration body changed")
     old = "          _state.value = RegistrationFlowState(\n            preExistingRegistrationData = repository.getPreExistingRegistrationData(),"
     if text.count(old) != 1:
         raise RuntimeError("Upstream fresh registration state changed")
@@ -115,6 +129,25 @@ def configure(checkout: Path):
     if run("git", "rev-parse", "HEAD", cwd=checkout) != REVISION:
         raise RuntimeError("Unexpected upstream revision")
     block_primary_registration(checkout)
+    message_table = checkout / "app/src/main/java/org/thoughtcrime/securesms/database/MessageTable.kt"
+    table_text = message_table.read_text()
+    anchor = "  fun getConversation(threadId: Long): Cursor {"
+    if table_text.count(anchor) != 1:
+        raise RuntimeError("Upstream message pagination boundary changed")
+    page_method = '''  // Orbiliq: stable keyset pagination; no mutable OFFSET across Binder calls.
+  fun getOrbiliqConversationPage(threadId: Long, beforeId: Long, pageSize: Int): Cursor {
+    require(threadId > 0 && beforeId > 0 && pageSize in 1..50)
+    return readableDatabase
+      .select(*MMS_PROJECTION)
+      .from(TABLE_NAME)
+      .where("$THREAD_ID = ? AND $ID < ? AND $STORY_TYPE = 0 AND $PARENT_STORY_ID <= 0 AND $SCHEDULED_DATE = -1 AND $LATEST_REVISION_ID IS NULL", threadId, beforeId)
+      .orderBy("$ID DESC")
+      .limit(pageSize)
+      .run()
+  }
+
+'''
+    message_table.write_text(table_text.replace(anchor, page_method + anchor))
     build = checkout / "app/build.gradle.kts"
     text = build.read_text()
     needle = "  defaultConfig {\n"
@@ -224,6 +257,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     dest = java / "org/orbiliq/core/provider/signal/SignalCompanion.kt"
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(common, dest)
+    shutil.copyfile(common.with_name("SignalMessaging.kt"), dest.with_name("SignalMessaging.kt"))
     # These types use only Kotlin + Flow, already part of the upstream client.
     (checkout / "ORBILIQ-COMPANION.md").write_text(
         f"# Orbiliq Signal Companion prototype\n\nUpstream: {REPOSITORY}\nRevision: {REVISION}\n\n"

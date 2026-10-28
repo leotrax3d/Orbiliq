@@ -40,7 +40,7 @@ class BridgeConsentActivity : Activity() {
     layout.addView(TextView(this).apply {
       text = "Orbiliq Signal Companion · experimentell\n\n" +
         "Orbiliq darf nach deiner Zustimmung den lokalen Verknüpfungsstatus abfragen. " +
-        "Nachrichten werden noch nicht an Orbiliq übertragen. Schlüssel und QR-Daten bleiben hier. " +
+        "Nachrichten erfordern eine eigene Freigabe für den verknüpften Account. Schlüssel und QR-Daten bleiben hier. " +
         "Verknüpfe ein zusätzliches Gerät; registriere deine Telefonnummer nicht erneut. " +
         "Für den QR-Scan benötigst du gegebenenfalls einen zweiten Bildschirm."
       textSize = 18f
@@ -77,7 +77,18 @@ class BridgeConsentActivity : Activity() {
       }
       startActivity(intent)
     }
-    button("Orbiliq-Zugriff entziehen") { access.revoke(); setResult(RESULT_CANCELED); finish() }
+    button("Nachrichtenzugriff für diesen verknüpften Account erlauben") {
+      try {
+        access.approve()
+        BridgeMessaging(this).approve()
+        Toast.makeText(this, "Orbiliq darf normale Direktchat-Texte lesen und senden. Verschwindende Nachrichten bleiben im Companion.", Toast.LENGTH_LONG).show()
+        setResult(RESULT_OK)
+        finish()
+      } catch (_: Exception) {
+        Toast.makeText(this, "Zuerst Companion entsperren und als zusätzliches Gerät verknüpfen.", Toast.LENGTH_LONG).show()
+      }
+    }
+    button("Orbiliq-Zugriff entziehen") { BridgeMessaging(this).revoke(); access.revoke(); setResult(RESULT_CANCELED); finish() }
     button("Abbrechen") { finish() }
     val scroll = ScrollView(this).apply { addView(layout) }
     scroll.setOnApplyWindowInsetsListener { view, insets ->

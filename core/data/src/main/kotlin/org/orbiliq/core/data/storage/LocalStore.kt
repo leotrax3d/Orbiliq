@@ -183,7 +183,12 @@ class PersistentLocalRepository(private val storage: SnapshotStorage) : LocalRep
                 messages.add(projected)
                 p.commandId?.let { id ->
                     pending.find { it.command.id == id }?.let { require(it.command.route == p.message.route) }
-                    pending.replaceAll { if(it.command.id == id) it.copy(status = PendingStatus.Confirmed) else it }
+                    pending.replaceAll { if(it.command.id == id) it.copy(status = when (projected.delivery) {
+                        DeliveryState.Pending, DeliveryState.Accepted -> if (it.status in setOf(PendingStatus.Confirmed, PendingStatus.Rejected)) it.status else PendingStatus.Accepted
+                        DeliveryState.OutcomeUnknown -> PendingStatus.OutcomeUnknown
+                        DeliveryState.Failed -> PendingStatus.Rejected
+                        else -> PendingStatus.Confirmed
+                    }, receipt = projected.ref?.remoteMessageId ?: it.receipt) else it }
                 }
             }
             is ProviderEvent.MessageDeleted -> {
@@ -217,7 +222,7 @@ class PersistentLocalRepository(private val storage: SnapshotStorage) : LocalRep
     }
     override suspend fun updateOperation(id: CommandId, status: PendingStatus, retryAt: Instant?, receipt: String?, failure: FailureCategory?, remote: MessageRef?, capabilityRevision: String?) = mutate {
         require(pending.any { it.command.id == id })
-        pending.replaceAll { if(it.command.id == id) it.copy(command = capabilityRevision?.let { revision -> it.command.copy(capabilityRevision = revision) } ?: it.command, status = if(it.status == PendingStatus.Confirmed) PendingStatus.Confirmed else status,
+        pending.replaceAll { if(it.command.id == id) it.copy(command = capabilityRevision?.let { revision -> it.command.copy(capabilityRevision = revision) } ?: it.command, status = if(it.status in setOf(PendingStatus.Confirmed, PendingStatus.Rejected)) it.status else status,
             attempts = it.attempts + if(status == PendingStatus.Dispatching) 1 else 0, retryAt = retryAt, receipt = receipt ?: it.receipt, failure = failure) else it }
         val operation = pending.single { it.command.id == id }
         require(remote == null || remote.conversation == operation.command.route)

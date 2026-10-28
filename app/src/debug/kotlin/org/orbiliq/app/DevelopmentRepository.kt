@@ -13,4 +13,4 @@ import org.orbiliq.app.storage.AndroidLocalStorage
 internal fun developmentConversationRepository(context: Context): ConversationRepository =
     if (BuildConfig.MOCK_MESSENGER) PersistentMockRepository(CoroutineScope(SupervisorJob() + Dispatchers.IO)) {
         AndroidLocalStorage(context).repository
-    } else UnconfiguredConversationRepository()
+    } else org.orbiliq.app.signal.SignalMessengerRepository(context)

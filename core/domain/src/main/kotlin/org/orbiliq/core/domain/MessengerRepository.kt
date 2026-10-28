@@ -11,6 +11,7 @@ data class MessengerSnapshot(
     val links: List<PersonIdentityLink>,
     val accounts: List<Account>,
     val archived: Set<ConversationId>,
+    val simulation: Boolean = false,
 )
 interface MessengerRepository : ConversationRepository, UnifiedCommunication {
     fun observeMessenger(): Flow<MessengerSnapshot>

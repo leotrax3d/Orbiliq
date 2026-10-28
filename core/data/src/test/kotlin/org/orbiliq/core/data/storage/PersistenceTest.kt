@@ -42,6 +42,24 @@ class PersistenceTest {
     private fun command(payload: CommandPayload = CommandPayload.SendText("synthetic outgoing")) = ProviderCommand(
         CommandId("command"), route, payload, now, now.plusSeconds(300), "1", idempotencyKey = "synthetic-key")
 
+    @Test fun `native queued echo is accepted and later failure cannot be overwritten by dispatch response`() = runTest {
+        val r = repository(); seed(r)
+        val command = command()
+        val optimistic = message().copy(id = MessageId(command.id.value), direction = MessageDirection.Outgoing, ref = null, delivery = DeliveryState.Pending)
+        r.enqueue(command, optimistic)
+        r.updateOperation(command.id, PendingStatus.Dispatching)
+        val queued = message().copy(direction = MessageDirection.Outgoing, delivery = DeliveryState.Pending)
+        r.apply(event(ProviderEvent.MessageUpserted(queued, command.id)))
+        assertEquals(PendingStatus.Accepted, r.snapshot().pending.single().status)
+        assertEquals(1, r.snapshot().messages.size)
+        assertEquals(MessageId(command.id.value), r.snapshot().messages.single().id)
+        r.apply(event(ProviderEvent.MessageUpserted(queued.copy(delivery = DeliveryState.Failed), command.id)))
+        r.updateOperation(command.id, PendingStatus.Accepted, receipt = "late-response")
+        assertEquals(PendingStatus.Rejected, r.snapshot().pending.single().status)
+        assertEquals(DeliveryState.Failed, r.snapshot().messages.single().delivery)
+        assertEquals(PendingStatus.Rejected, repository().snapshot().pending.single().status)
+    }
+
     @Test fun `reopening restores projection metadata links media checkpoints and outbox`() = runTest {
         val r = repository(); seed(r)
         val person = Person(PersonId("person"), "Synthetic Person")

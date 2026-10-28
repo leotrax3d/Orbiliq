@@ -31,7 +31,7 @@ class SignalSetupActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                         Text("Signal einrichten", style = MaterialTheme.typography.headlineMedium)
-                        Text("Experimenteller Companion. Geräteverknüpfung und Schlüsselverwaltung laufen in einer separaten App. Nachrichten sind in Orbiliq noch nicht verfügbar.")
+                        Text("Experimenteller Companion. Geräteverknüpfung und Schlüsselverwaltung laufen in einer separaten App. Nach eigener Freigabe im Companion kann Orbiliq normale Direktchat-Texte übernehmen und senden. Medien, Gruppen und verschwindende Inhalte bleiben vorerst im Companion.")
                         Text(statusLabel(status.link), style = MaterialTheme.typography.titleMedium)
                         if (status.link == SignalLinkState.Missing) Text("Installiere zuerst den separat gebauten Orbiliq Signal Companion. Beide lokalen Builds benötigen dieselbe Signatur.")
                         if (status.link !in setOf(SignalLinkState.Missing, SignalLinkState.Untrusted, SignalLinkState.Unavailable, SignalLinkState.UpdateRequired)) {
