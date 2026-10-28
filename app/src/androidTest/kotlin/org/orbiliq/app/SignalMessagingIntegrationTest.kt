@@ -174,4 +174,140 @@ class SignalMessagingIntegrationTest {
             t.messages.none { (it.content as? MessageContent.Text)?.text?.startsWith(marker) == true }
         } }
     }
+
+    private suspend fun selfChat(repository: MessengerRepository): Pair<SendRoute, ConversationTarget> {
+        val snapshot = withTimeout(60_000) { repository.observeMessenger().first { s ->
+            s.accounts.any { account -> account.ownIdentityId != null && s.entries.any { it.route.conversation.participants == setOf(account.ownIdentityId) } }
+        } }
+        val own = snapshot.accounts.single().ownIdentityId!!
+        val route = snapshot.entries.single { it.route.conversation.participants == setOf(own) }.route
+        val target = ConversationTarget.ProviderChat(route.conversation.ref)
+        withTimeout(60_000) { while (repository.sendRoutes(target, "x").none { it.availability is Availability.Available }) kotlinx.coroutines.delay(200) }
+        return route to target
+    }
+
+    /** Opt-in, own "Notiz an mich" only: remove an own reaction, mark read, then delete for me. */
+    @Test fun selfUnreactReadAndDeleteForMe() = runBlocking<Unit> {
+        assumeTrue("Explicit self-send opt-in required", args.getString("signalSelfSend") == "true")
+        val repository = EntryPointAccessors.fromApplication(context, ConversationRepositoryEntryPoint::class.java).conversations() as MessengerRepository
+        val (route, target) = selfChat(repository)
+        val marker = "Orbiliq Aktionstest ${UUID.randomUUID()}"
+        assertTrue(repository.sendText(target, route, marker) is SendTextResult.Queued)
+        val message = withTimeout(90_000) { repository.observeTimeline(target).first { t ->
+            t.messages.any { (it.content as? MessageContent.Text)?.text == marker && it.ref != null && it.delivery in setOf(DeliveryState.Sent, DeliveryState.Delivered, DeliveryState.Read) }
+        } }.messages.single { (it.content as? MessageContent.Text)?.text == marker }
+        val thumbs = "👍"
+        assertTrue(repository.react(message.id, thumbs))
+        withTimeout(90_000) { repository.observeTimeline(target).first { it.reactions[message.id]?.get(thumbs) == 1 } }
+        assertTrue(repository.removeReaction(message.id))
+        withTimeout(90_000) { repository.observeTimeline(target).first { it.reactions[message.id].isNullOrEmpty() } }
+        assertTrue("Mark read refused", repository.markRead(route, java.time.Instant.now()))
+        repository.setTyping(route, false) // Result depends on the user's own Signal setting.
+        withTimeout(60_000) { while (!repository.canDeleteForMe(message.id)) kotlinx.coroutines.delay(200) }
+        assertTrue(repository.deleteForMe(message.id))
+        withTimeout(90_000) { repository.observeTimeline(target).first { t -> t.messages.none { (it.content as? MessageContent.Text)?.text == marker } } }
+    }
+
+    /** Opt-in, own "Notiz an mich" only: synthetic voice note and a synthetic MP4 carrying a GPS location. */
+    @Test fun selfVoiceNoteAndVideoArriveWithoutLocation() = runBlocking<Unit> {
+        assumeTrue("Explicit self-send opt-in required", args.getString("signalSelfSend") == "true")
+        val repository = EntryPointAccessors.fromApplication(context, ConversationRepositoryEntryPoint::class.java).conversations() as MessengerRepository
+        val (route, target) = selfChat(repository)
+        assertTrue(repository.canSendMedia(route, AttachmentKind.VoiceNote))
+        val voice = repository.sendMedia(target, route, AttachmentKind.VoiceNote, silentAac(), "audio/aac", null)
+        assertTrue("Voice not queued: " + voice::class.simpleName, voice is SendTextResult.Queued)
+        val caption = "Videotest ${UUID.randomUUID()}"
+        val located = syntheticMp4WithLocation()
+        assertTrue("Fixture lacks a location", locationOf(located) != null)
+        val video = repository.sendMedia(target, route, AttachmentKind.Video, located, "video/mp4", caption)
+        assertTrue("Video not queued: " + video::class.simpleName, video is SendTextResult.Queued)
+        val sent = withTimeout(180_000) { repository.observeTimeline(target).first { t ->
+            t.messages.any { (it.content as? MessageContent.Media)?.caption == caption && it.ref != null &&
+                (it.content as MessageContent.Media).attachments.single().value.contains(":file:") }
+        } }.messages.single { (it.content as? MessageContent.Media)?.caption == caption }
+        val id = (sent.content as MessageContent.Media).attachments.single()
+        assertTrue(repository.attachmentKind(id) == AttachmentKind.Video)
+        val back = requireNotNull(repository.loadAttachment(sent.id, id))
+        assertNull("Location survived", locationOf(back.bytes))
+    }
+
+    private fun locationOf(mp4: ByteArray): String? {
+        val file = java.io.File.createTempFile("orbiliq-test", ".mp4", context.cacheDir)
+        return try {
+            file.writeBytes(mp4)
+            android.media.MediaMetadataRetriever().run { try { setDataSource(file.path); extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_LOCATION) } finally { release() } }
+        } finally { file.delete() }
+    }
+
+    private fun silentAac(): ByteArray {
+        val format = android.media.MediaFormat.createAudioFormat("audio/mp4a-latm", 44100, 1).apply {
+            setInteger(android.media.MediaFormat.KEY_AAC_PROFILE, android.media.MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+            setInteger(android.media.MediaFormat.KEY_BIT_RATE, 64000)
+        }
+        val codec = android.media.MediaCodec.createEncoderByType("audio/mp4a-latm")
+        codec.configure(format, null, null, android.media.MediaCodec.CONFIGURE_FLAG_ENCODE); codec.start()
+        val out = java.io.ByteArrayOutputStream()
+        val info = android.media.MediaCodec.BufferInfo()
+        var fed = 0; var done = false; var eos = false
+        while (!done) {
+            if (!eos) { val i = codec.dequeueInputBuffer(10_000); if (i >= 0) {
+                val buffer = codec.getInputBuffer(i)!!; buffer.clear()
+                val n = minOf(buffer.capacity(), 2048)
+                buffer.put(ByteArray(n)); fed += n
+                eos = fed > 44100 * 2
+                codec.queueInputBuffer(i, 0, n, fed * 1_000_000L / (44100 * 2), if (eos) android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM else 0)
+            } }
+            val o = codec.dequeueOutputBuffer(info, 10_000)
+            if (o >= 0) {
+                if (info.flags and android.media.MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0 && info.size > 0) {
+                    val len = info.size + 7
+                    out.write(byteArrayOf(0xFF.toByte(), 0xF1.toByte(), (0x40 or (4 shl 2)).toByte(), (0x40 or (len shr 11)).toByte(),
+                        ((len shr 3) and 0xFF).toByte(), (((len and 7) shl 5) or 0x1F).toByte(), 0xFC.toByte()))
+                    val chunk = ByteArray(info.size); codec.getOutputBuffer(o)!!.get(chunk); out.write(chunk)
+                }
+                done = info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                codec.releaseOutputBuffer(o, false)
+            }
+        }
+        codec.stop(); codec.release()
+        return out.toByteArray()
+    }
+
+    private fun syntheticMp4WithLocation(): ByteArray {
+        val file = java.io.File.createTempFile("orbiliq-located", ".mp4", context.cacheDir)
+        try {
+            val format = android.media.MediaFormat.createVideoFormat("video/avc", 320, 240).apply {
+                setInteger(android.media.MediaFormat.KEY_COLOR_FORMAT, android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                setInteger(android.media.MediaFormat.KEY_BIT_RATE, 500_000); setInteger(android.media.MediaFormat.KEY_FRAME_RATE, 15)
+                setInteger(android.media.MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+            }
+            val codec = android.media.MediaCodec.createEncoderByType("video/avc")
+            codec.configure(format, null, null, android.media.MediaCodec.CONFIGURE_FLAG_ENCODE)
+            val surface = codec.createInputSurface(); codec.start()
+            val muxer = android.media.MediaMuxer(file.path, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            muxer.setLocation(52.52f, 13.405f)
+            val info = android.media.MediaCodec.BufferInfo()
+            var track = -1; var frames = 0; var done = false
+            while (!done) {
+                if (frames < 30) {
+                    val canvas = surface.lockHardwareCanvas()
+                    canvas.drawColor(android.graphics.Color.rgb(20 + frames * 7, 90, 200)); surface.unlockCanvasAndPost(canvas)
+                    frames++
+                    if (frames == 30) codec.signalEndOfInputStream()
+                }
+                val o = codec.dequeueOutputBuffer(info, 20_000)
+                when {
+                    o == android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> { track = muxer.addTrack(codec.outputFormat); muxer.start() }
+                    o >= 0 -> {
+                        if (info.flags and android.media.MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0 && info.size > 0 && track >= 0)
+                            muxer.writeSampleData(track, codec.getOutputBuffer(o)!!, info)
+                        done = info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                        codec.releaseOutputBuffer(o, false)
+                    }
+                }
+            }
+            codec.stop(); codec.release(); surface.release(); muxer.stop(); muxer.release()
+            return file.readBytes()
+        } finally { file.delete() }
+    }
 }
