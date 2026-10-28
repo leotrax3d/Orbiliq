@@ -12,6 +12,8 @@ object SignalMessagingContract {
     const val MAX_IMAGES = 10
     const val MAX_IMAGE_BYTES = 16L * 1024 * 1024
     val IMAGE_TYPES = setOf("image/jpeg", "image/png", "image/webp", "image/gif")
+    const val STAGE_CHUNK_BYTES = 256 * 1024
+    const val MAX_IMAGE_EDGE = 4096
 }
 
 class SignalBinding(val id: String) {
@@ -71,10 +73,12 @@ interface SignalMessagingTransport {
     suspend fun texts(binding: SignalBinding, thread: Long, beforeId: Long = Long.MAX_VALUE): SignalTextPage
     suspend fun lookup(binding: SignalBinding, thread: Long, ids: List<Long>): List<SignalText>
     /** [replyTo] quotes a native message of the same thread; the companion validates it again. */
-    suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long? = null): SignalSendResult
+    suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long? = null, image: String? = null): SignalSendResult
     suspend fun reconcileText(binding: SignalBinding, commandId: String, thread: Long): SignalSendResult
     /** Sets the own reaction (idempotent: an identical existing reaction is not resent). */
     suspend fun react(binding: SignalBinding, thread: Long, message: Long, emoji: String): SignalSendResult = SignalSendResult.Rejected
     /** Decrypted image bytes of one exportable message, bounded by [SignalMessagingContract.MAX_IMAGE_BYTES]. */
     suspend fun image(binding: SignalBinding, thread: Long, message: Long, attachment: Long): ByteArray? = null
+    /** Hands a JPEG to the companion's encrypted store; true once fully staged under [token]. */
+    suspend fun stageImage(binding: SignalBinding, token: String, jpeg: ByteArray): Boolean = false
 }

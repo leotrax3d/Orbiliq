@@ -47,6 +47,19 @@ class InboxViewModel(repository: ConversationRepository) : ViewModel() {
         }
     } catch (c: CancellationException) { throw c }
       catch (_: Exception) { _notice.value = "Nachricht konnte nicht gespeichert werden. Bitte erneut versuchen."; false }
+    suspend fun canSendImage(route: SendRoute): Boolean = try { messenger?.canSendImage(route) == true }
+        catch (c: CancellationException) { throw c }
+        catch (_: Exception) { false }
+    /** Re-encodes to JPEG (max 2048 px), which drops EXIF/GPS metadata before anything leaves Orbiliq. */
+    suspend fun sendImage(route: SendRoute, uri: android.net.Uri, resolver: android.content.ContentResolver, caption: String?): Boolean = try {
+        val jpeg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { cleanJpeg(uri, resolver) }
+        if (jpeg == null) { _notice.value = "Bild konnte nicht gelesen werden."; false }
+        else when (messenger?.sendImage(ConversationTarget.ProviderChat(route.conversation.ref), route, jpeg, caption?.trim()?.ifEmpty { null })) {
+            is SendTextResult.Queued -> true
+            else -> { _notice.value = "Bildversand nicht verf\u00fcgbar."; false }
+        }
+    } catch (c: CancellationException) { throw c }
+      catch (_: Exception) { _notice.value = "Bild konnte nicht gesendet werden."; false }
     suspend fun loadImage(message: MessageId, attachment: AttachmentId): ByteArray? = try { messenger?.loadImage(message, attachment) }
         catch (c: CancellationException) { throw c }
         catch (_: Exception) { null }
@@ -64,4 +77,20 @@ class InboxViewModel(repository: ConversationRepository) : ViewModel() {
         catch (c: CancellationException) { throw c }
         catch (_: Exception) { _notice.value = "Ordner konnte nicht geändert werden." }
     } }
+}
+
+internal fun cleanJpeg(uri: android.net.Uri, resolver: android.content.ContentResolver, maxEdge: Int = 2048): ByteArray? {
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxEdge) sample *= 2
+    val decoded = resolver.openInputStream(uri)?.use {
+        android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+    } ?: return null
+    val scale = minOf(1f, maxEdge.toFloat() / maxOf(decoded.width, decoded.height))
+    val bitmap = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(decoded, (decoded.width * scale).toInt().coerceAtLeast(1),
+        (decoded.height * scale).toInt().coerceAtLeast(1), true).also { if (it != decoded) decoded.recycle() } else decoded
+    return try { java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }.toByteArray() }
+    finally { bitmap.recycle() }
 }

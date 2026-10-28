@@ -14,7 +14,7 @@ import org.orbiliq.core.provider.api.*
 
 class SignalMessagingProviderFactory(private val transport: SignalMessagingTransport) : ProviderFactory {
     override val descriptor = ProviderDescriptor(ProviderId("signal"), "Signal Companion", "0.3-direct-text-quotes",
-        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive), ReplayClass.BestEffort)
+        ContractVersion(1, 0), setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive), ReplayClass.BestEffort)
     override suspend fun open(account: AccountHandle): ProviderSession {
         require(account.account.providerId == descriptor.id)
         val binding = requireNotNull(transport.binding()) { "signal.messaging.consent-required" }
@@ -77,6 +77,7 @@ class SignalMessagingSession(
         /** Images are fetched on demand from the companion and decoded in memory only. */
         val ImageReceive = OperationKey("signal.image.receive")
         fun attachmentId(account: AccountId, image: Long) = AttachmentId("${account.value}:image:$image")
+        fun stagedId(account: AccountId, token: String) = AttachmentId("${account.value}:staged:$token")
         fun accountFor(binding: SignalBinding) = Account(AccountId("signal-${binding.id}"), provider, "Signal", IdentityId("signal-${binding.id}:self"))
         private val security = SecurityContext(Encryption.EndToEnd, Verification.Unknown)
     }
@@ -111,6 +112,10 @@ class SignalMessagingSession(
             QuoteReceive to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             Operations.SendText to sendSupport(allowed),
             Operations.Reply to sendSupport(allowed),
+            Operations.sendMedia(AttachmentKind.Image) to OperationSupport(if (allowed) Availability.Available(OperationConstraints(
+                maxBytes = SignalMessagingContract.MAX_IMAGE_BYTES, mimeTypes = setOf("image/jpeg"), maxTextLength = SignalMessagingContract.MAX_TEXT,
+                persistentOfflineQueue = true)) else Availability.Restricted(Restriction.Policy),
+                quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security),
             Operations.React to OperationSupport(if (allowed && routeScoped) Availability.Available() else Availability.Restricted(Restriction.Policy),
                 quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security),
             ))
@@ -259,20 +264,43 @@ class SignalMessagingSession(
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { DispatchResult.OutcomeUnknown("signal.reaction.unknown") }
     }
+    /** Stages a JPEG in the companion's encrypted store; the returned id is only valid for this account. */
+    suspend fun stageImage(jpeg: ByteArray): AttachmentId? {
+        if (!job.isActive || jpeg.isEmpty() || jpeg.size > SignalMessagingContract.MAX_IMAGE_BYTES) return null
+        val token = UUID.randomUUID().toString().replace("-", "")
+        return try {
+            check(transport.binding()?.id == binding.id)
+            if (sendGate.withLock { transport.stageImage(binding, token, jpeg) }) stagedId(accountId, token) else null
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { null }
+    }
     override suspend fun execute(command: ProviderCommand): DispatchResult = sendGate.withLock {
         (command.payload as? CommandPayload.React)?.let { return react(command, it) }
+        (command.payload as? CommandPayload.SendMedia)?.let { media ->
+            val prefix = "${accountId.value}:staged:"
+            val token = media.attachment.value.takeIf { media.kind == AttachmentKind.Image && it.startsWith(prefix) }?.removePrefix(prefix)
+                ?.takeIf { it.matches(Regex("[0-9a-f]{32}")) } ?: return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
+            return dispatch(command, media.caption.orEmpty(), null, token, media.operation)
+        }
         val text = command.payload as? CommandPayload.SendText ?: return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
+        val replyTo = text.replyTo?.let { ref -> ref.remoteMessageId.toLongOrNull()?.takeIf { it > 0 && ref.conversation == command.route } ?: -1L }
+        if (replyTo == -1L) return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
+        return dispatch(command, text.text, replyTo, null, text.operation)
+    }
+    private suspend fun dispatch(command: ProviderCommand, body: String, replyTo: Long?, image: String?, operation: OperationKey): DispatchResult {
         val thread = command.route.remoteConversationId.toLongOrNull()
         val scope = CapabilityScope.Conversation(provider, command.route)
-        val replyTo = text.replyTo?.let { ref -> ref.remoteMessageId.toLongOrNull()?.takeIf { it > 0 && ref.conversation == command.route } ?: -1L }
-        if (!job.isActive || thread == null || command.route.accountId != accountId || replyTo == -1L || command.schemaVersion != 1 ||
+        if (!job.isActive || thread == null || command.route.accountId != accountId || command.schemaVersion != 1 ||
             clock.instant() < command.createdAt || clock.instant() >= command.expiresAt || command.dependencies.isNotEmpty() ||
-            command.capabilityRevision != support(scope).revision || evaluate(OperationRequest(scope, text.operation, textLength = text.text.length,
-                sizeBytes = text.text.toByteArray(Charsets.UTF_8).size.toLong(), targetKind = ConversationKind.Direct)) !is Availability.Available)
+            command.capabilityRevision != support(scope).revision || (body.isEmpty() && image == null) ||
+            evaluate(OperationRequest(scope, operation, textLength = body.length,
+                sizeBytes = body.toByteArray(Charsets.UTF_8).size.toLong(),
+                mimeType = if (image == null) null else "image/jpeg", targetKind = ConversationKind.Direct)) !is Availability.Available ||
+            body.toByteArray(Charsets.UTF_8).size > SignalMessagingContract.MAX_TEXT_BYTES)
             return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
         return try {
             check(transport.binding()?.id == binding.id)
-            when (val result = transport.sendText(binding, command.id.value, thread, text.text, replyTo)) {
+            when (val result = transport.sendText(binding, command.id.value, thread, body, replyTo, image)) {
                 is SignalSendResult.Queued -> {
                     commandMessages[messageRef(thread, result.messageId)] = command.id
                     known.getOrPut(thread) { java.util.concurrent.ConcurrentHashMap.newKeySet<Long>() }.add(result.messageId)

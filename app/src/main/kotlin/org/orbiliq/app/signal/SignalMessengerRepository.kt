@@ -104,6 +104,17 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
         if ((stored.content as? MessageContent.Media)?.attachments?.contains(attachment) != true) return@withContext null
         session?.image(ref, attachment)
     }
+    override suspend fun canSendImage(route: SendRoute) = withContext(Dispatchers.IO) {
+        route.conversation.ref.accountId == account.value && communication().imageAvailability(route, null) is Availability.Available
+    }
+    override suspend fun sendImage(target: ConversationTarget, route: SendRoute, jpeg: ByteArray, caption: String?) = withContext(Dispatchers.IO) {
+        check(route.conversation.ref.accountId == account.value)
+        val current = session?.takeIf { it.accountId == route.conversation.ref.accountId }
+            ?: return@withContext SendTextResult.Unavailable(Availability.Unknown)
+        if (communication().imageAvailability(route, caption) !is Availability.Available) return@withContext SendTextResult.Unavailable(Availability.Restricted(Restriction.Policy))
+        val staged = current.stageImage(jpeg) ?: return@withContext SendTextResult.Unavailable(Availability.Unknown)
+        communication().sendStagedImage(target, route, staged, caption)
+    }
     override suspend fun canReact(message: MessageId) = withContext(Dispatchers.IO) { account.value != null && communication().canReact(message) }
     override suspend fun react(message: MessageId, emoji: String) = withContext(Dispatchers.IO) {
         val active = account.value ?: return@withContext false

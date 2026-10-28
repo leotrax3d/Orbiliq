@@ -30,8 +30,11 @@ class SignalMessagingTest {
         }
         override suspend fun lookup(binding: SignalBinding, thread: Long, ids: List<Long>) = ids.mapNotNull { rows[it]?.takeIf { row -> row.thread == thread } }
         var lastReplyTo: Long? = null
-        override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long?): SignalSendResult {
-            sendCalls++; lastReplyTo = replyTo
+        var lastImage: String? = null
+        val staged = mutableMapOf<String, Int>()
+        override suspend fun stageImage(binding: SignalBinding, token: String, jpeg: ByteArray): Boolean { staged[token] = jpeg.size; return true }
+        override suspend fun sendText(binding: SignalBinding, commandId: String, thread: Long, text: String, replyTo: Long?, image: String?): SignalSendResult {
+            sendCalls++; lastReplyTo = replyTo; lastImage = image
             return if (unknown) SignalSendResult.Unknown else SignalSendResult.Queued(22)
         }
         var imageCalls = 0
@@ -72,7 +75,7 @@ class SignalMessagingTest {
     @Test fun textCapabilitiesDoNotPromiseMediaGroupSendingOrHistory() = runBlocking {
         running(Peer(binding)) { session, _ ->
             val caps = session.observeCapabilities(scope(session)).first()
-            assertEquals(setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.ReceiveText, SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive), caps.operations.keys)
+            assertEquals(setOf(Operations.SendText, Operations.Reply, Operations.React, Operations.sendMedia(AttachmentKind.Image), Operations.ReceiveText, SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive, SignalMessagingSession.ImageReceive), caps.operations.keys)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.React)) is Availability.Available)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4001)) is Availability.Restricted)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2, sizeBytes = 2)) is Availability.Available)
@@ -240,6 +243,20 @@ class SignalMessagingTest {
             assertNull(session.image(message.ref!!, AttachmentId("foreign:image:5")))
             assertNull(session.image(MessageRef(ConversationRef(AccountId("other"), "7"), "11"), media.attachments.single()))
             assertEquals(1, peer.imageCalls)
+        }
+    }
+    @Test fun stagedImageIsSentOnlyWithItsOwnAccountToken() = runBlocking {
+        val peer = Peer(binding)
+        running(peer) { session, _ ->
+            val staged = requireNotNull(session.stageImage(byteArrayOf(1, 2, 3)))
+            val token = staged.value.substringAfterLast(":")
+            assertEquals(3, peer.staged[token])
+            val op = Operations.sendMedia(AttachmentKind.Image)
+            assertTrue(session.evaluate(OperationRequest(scope(session), op, textLength = 0, sizeBytes = 0, mimeType = "image/jpeg")) is Availability.Available)
+            assertTrue(session.execute(command(session, CommandPayload.SendMedia(AttachmentId("foreign:staged:$token"), AttachmentKind.Image))) is DispatchResult.Rejected)
+            assertEquals(0, peer.sendCalls)
+            assertTrue(session.execute(command(session, CommandPayload.SendMedia(staged, AttachmentKind.Image, "caption"))) is DispatchResult.Accepted)
+            assertEquals(token, peer.lastImage)
         }
     }
     @Test fun imageContractRejectsUnsupportedTypesAndOversize() {

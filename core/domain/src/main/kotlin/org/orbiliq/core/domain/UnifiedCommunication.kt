@@ -33,4 +33,9 @@ interface UnifiedCommunication {
     suspend fun react(message: MessageId, emoji: String): Boolean = false
     /** Image bytes for display only (never persisted by Orbiliq); null when unavailable. */
     suspend fun loadImage(message: MessageId, attachment: AttachmentId): ByteArray? = null
+    /** Whether [route] currently accepts metadata-free JPEG images. */
+    suspend fun canSendImage(route: SendRoute): Boolean = false
+    /** [jpeg] must already be re-encoded without metadata; Queued means durable ownership, not delivery. */
+    suspend fun sendImage(target: ConversationTarget, route: SendRoute, jpeg: ByteArray, caption: String?): SendTextResult =
+        SendTextResult.Unavailable(Availability.Unsupported("media.unsupported"))
 }

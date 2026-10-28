@@ -23,6 +23,7 @@ import org.thoughtcrime.securesms.database.model.MessageId
 import org.thoughtcrime.securesms.database.model.MessageRecord
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord
 import org.thoughtcrime.securesms.keyvalue.SignalStore
+import org.thoughtcrime.securesms.mms.ImageSlide
 import org.thoughtcrime.securesms.mms.OutgoingMessage
 import org.thoughtcrime.securesms.mms.QuoteModel
 import org.thoughtcrime.securesms.service.KeyCachingService
@@ -34,6 +35,8 @@ import org.whispersystems.signalservice.api.messages.SignalServiceMessageLimits
 internal class BridgeMessaging(private val context: Context) {
   companion object {
     val gate = Any()
+    /** In-flight uploads only; a process death simply fails staging before anything is queued. */
+    private val staging = HashMap<String, java.io.ByteArrayOutputStream>()
     fun hash(value: String): String = MessageDigest.getInstance("SHA-256")
       .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
   }
@@ -134,8 +137,42 @@ internal class BridgeMessaging(private val context: Context) {
       "messageSend", "messageReconcile" -> send(binding, method, extras)
       "messageReact" -> react(extras)
       "messageImage" -> image(extras)
+      "messageStageImage" -> stage(binding, extras)
       else -> error("Unsupported bridge operation")
     }.apply { putInt("messageProtocolVersion", SignalMessagingContract.VERSION) }
+  }
+  /**
+   * Receives a JPEG in bounded chunks, re-encodes it here (authoritative EXIF/GPS removal), and keeps it
+   * encrypted in Signal's own blob store until a send command references its token.
+   */
+  private fun stage(binding: String, extras: Bundle): Bundle {
+    val token = requireNotNull(extras.getString("token"))
+    require(token.matches(Regex("[0-9a-f]{32}")))
+    val total = extras.getLong("total")
+    val chunk = requireNotNull(extras.getByteArray("chunk"))
+    require(total in 1..SignalMessagingContract.MAX_IMAGE_BYTES && chunk.size in 1..SignalMessagingContract.STAGE_CHUNK_BYTES)
+    if (staging.size > 4 && token !in staging) staging.clear()
+    val buffer = staging.getOrPut(token) { java.io.ByteArrayOutputStream() }
+    check(extras.getLong("offset") == buffer.size().toLong() && buffer.size() + chunk.size <= total)
+    buffer.write(chunk)
+    if (buffer.size().toLong() < total) return Bundle().apply { putString("result", "Partial") }
+    val bytes = staging.remove(token)!!.toByteArray()
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    check(bounds.outMimeType == "image/jpeg" && bounds.outWidth in 1..SignalMessagingContract.MAX_IMAGE_EDGE &&
+      bounds.outHeight in 1..SignalMessagingContract.MAX_IMAGE_EDGE)
+    val bitmap = requireNotNull(android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+    val clean = java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }.toByteArray()
+    val width = bitmap.width; val height = bitmap.height
+    bitmap.recycle(); bytes.fill(0)
+    check(clean.size <= SignalMessagingContract.MAX_IMAGE_BYTES)
+    val uri = org.signal.core.util.contentproviders.BlobProvider.getInstance().forData(clean).withMimeType("image/jpeg")
+      .createForMultipleSessionsOnDisk(context)
+    val ledger = Ledger(context, binding)
+    val state = ledger.read()
+    state.put("staged:$token", JSONObject().put("uri", uri.toString()).put("size", clean.size.toLong()).put("width", width).put("height", height))
+    ledger.write(state)
+    return Bundle().apply { putString("result", "Staged") }
   }
   private fun shareableImage(attachment: DatabaseAttachment): Boolean =
     attachment.contentType in SignalMessagingContract.IMAGE_TYPES && attachment.transferState == AttachmentTable.TRANSFER_PROGRESS_DONE &&
@@ -240,14 +277,16 @@ internal class BridgeMessaging(private val context: Context) {
     var entry = state.optJSONObject(key)
     val replyTo = extras.getLong("replyTo", 0L)
     require(replyTo >= 0)
+    val imageToken = extras.getString("image")
     if (entry != null) {
-      check(entry.getLong("thread") == thread && entry.optLong("replyTo", 0L) == replyTo)
+      check(entry.getLong("thread") == thread && entry.optLong("replyTo", 0L) == replyTo && entry.optString("image", "") == (imageToken ?: ""))
       if (method == "messageSend") check(entry.getString("bodyHash") == hash(requireNotNull(extras.getString("text"))))
       return find(entry)
     }
     if (method == "messageReconcile") return Bundle().apply { putString("result", "Unknown") }
     val text = requireNotNull(extras.getString("text"))
-    require(text.isNotEmpty() && text.length <= SignalMessagingContract.MAX_TEXT)
+    val staged = imageToken?.let { state.optJSONObject("staged:$it") ?: return Bundle().apply { putString("result", "Rejected") } }
+    require((text.isNotEmpty() || staged != null) && text.length <= SignalMessagingContract.MAX_TEXT)
     require(text.toByteArray(Charsets.UTF_8).size <= SignalServiceMessageLimits.MAX_INLINE_BODY_SIZE_BYTES)
     val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)
     if (recipient == null || (!recipient.isIndividual && !recipient.isSelf) || !canSendNormal(recipient, thread))
@@ -264,9 +303,11 @@ internal class BridgeMessaging(private val context: Context) {
     check(state.length() < 100_000)
     val timestamp = maxOf(System.currentTimeMillis(), state.optLong("lastTimestamp", 0L) + 1)
     entry = JSONObject().put("thread", thread).put("timestamp", timestamp).put("bodyHash", hash(text)).put("replyTo", replyTo)
+    imageToken?.let { entry.put("image", it) }
     state.put(key, entry).put("lastTimestamp", timestamp)
     ledger.write(state) // Durable claim BEFORE any potentially effective send; never auto-resend a claim.
-    MessageSender.send(context, OutgoingMessage(threadRecipient = recipient, sentTimeMillis = timestamp, body = text, isSecure = true, outgoingQuote = quote),
+    MessageSender.send(context, OutgoingMessage(threadRecipient = recipient, sentTimeMillis = timestamp, body = text, isSecure = true, outgoingQuote = quote,
+      attachments = staged?.let { listOf(ImageSlide(context, android.net.Uri.parse(it.getString("uri")), it.getLong("size"), it.getInt("width"), it.getInt("height"), null).asAttachment()) }.orEmpty()),
       thread, MessageSender.SendType.SIGNAL, null, null)
     return find(entry)
   }

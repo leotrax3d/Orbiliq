@@ -314,7 +314,19 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
             }
         }
         if (allowed == false) Text("Dieser Versandweg ist momentan nicht verfügbar. Dein Entwurf bleibt erhalten.", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelMedium)
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val canImage by produceState(false, route, snapshot.syncNotice) { value = model.canSendImage(route) }
+        val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
+            if (uri != null) scope.launch {
+                sending = true
+                try { if (model.sendImage(route, uri, context.contentResolver, draft)) draft = "" }
+                finally { sending = false }
+            }
+        }
         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+            if (canImage) TextButton(onClick = {
+                picker.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }, enabled = !sending, modifier = Modifier.padding(bottom = 24.dp).heightIn(min = 48.dp).semantics { contentDescription = "Bild ohne Metadaten senden" }) { Text("Bild") }
             OutlinedTextField(draft, { draft = it }, Modifier.weight(1f), label = { Text("Nachricht über ${if (snapshot.simulation) "Mock" else route.providerId.value}") }, shape = MaterialTheme.shapes.extraLarge, maxLines = 5, enabled = !sending,
                 supportingText = {
                     val limit = textConstraints?.maxBytes
