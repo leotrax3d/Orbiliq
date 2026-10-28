@@ -95,7 +95,7 @@ class SignalMessagingSession(
             putAll(mapOf(
             Operations.ReceiveText to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             Operations.SendText to OperationSupport(if (allowed) Availability.Available(OperationConstraints(maxTextLength = SignalMessagingContract.MAX_TEXT,
-                persistentOfflineQueue = true, targetKinds = setOf(ConversationKind.Direct, ConversationKind.Saved))) else Availability.Restricted(Restriction.Policy),
+                maxBytes = SignalMessagingContract.MAX_TEXT_BYTES.toLong(), persistentOfflineQueue = true)) else Availability.Restricted(Restriction.Policy),
                 quality = DataQuality.SinceCheckpoint, replay = ReplayClass.BestEffort, security = security),
             ))
             if (remote == null || thread?.direct == false) put(OperationKey("signal.group.title.receive"),
@@ -105,6 +105,8 @@ class SignalMessagingSession(
     }
     override fun observeCapabilities(scope: CapabilityScope): Flow<CapabilitySnapshot> = combine(state, threadState) { _, _ -> support(scope) }
     override suspend fun evaluate(request: OperationRequest): Availability {
+        if (request.operation == Operations.SendText && request.targetKind in setOf(ConversationKind.Group, ConversationKind.Channel, ConversationKind.Topic))
+            return Availability.Restricted(Restriction.Policy)
         val availability = support(request.scope).operations[request.operation]?.availability ?: return Availability.Unsupported("signal.operation.unavailable")
         return if (availability is Availability.Available && !availability.constraints.permits(request, clock.instant())) Availability.Restricted(Restriction.Policy) else availability
     }
@@ -197,9 +199,15 @@ class SignalMessagingSession(
             catch (_: Exception) {
                 stateValue.value = ProviderState(AuthState.Blocked, ConnectionState.Offline, SyncState.Degraded,
                     requirements = setOf("signal.messaging.unavailable"))
+                // Never continue emitting after a downstream projection/commit failure.
+                // The coordinator owns retry and resumes from its committed checkpoint.
+                throw IllegalStateException("signal.messaging.unavailable")
             }
             delay(pollMillis)
         }
+    }.onCompletion { cause ->
+        if (cause != null && cause !is CancellationException) stateValue.value = ProviderState(AuthState.Blocked, ConnectionState.Offline, SyncState.Degraded,
+            requirements = setOf("signal.messaging.unavailable"))
     }
     override suspend fun acknowledge(cursor: ReplayCursor): OperationResult<Unit> =
         if (job.isActive && cursor.accountId == accountId && cursor.streamId == "signal-snapshot" && cursor.epoch == epoch &&
@@ -211,7 +219,8 @@ class SignalMessagingSession(
         val scope = CapabilityScope.Conversation(provider, command.route)
         if (!job.isActive || thread == null || command.route.accountId != accountId || text.replyTo != null || command.schemaVersion != 1 ||
             clock.instant() < command.createdAt || clock.instant() >= command.expiresAt || command.dependencies.isNotEmpty() ||
-            command.capabilityRevision != support(scope).revision || evaluate(OperationRequest(scope, Operations.SendText, textLength = text.text.length, targetKind = ConversationKind.Direct)) !is Availability.Available)
+            command.capabilityRevision != support(scope).revision || evaluate(OperationRequest(scope, Operations.SendText, textLength = text.text.length,
+                sizeBytes = text.text.toByteArray(Charsets.UTF_8).size.toLong(), targetKind = ConversationKind.Direct)) !is Availability.Available)
             return DispatchResult.Rejected(ProviderFailure(FailureCategory.CapabilityUnavailable))
         return try {
             check(transport.binding()?.id == binding.id)

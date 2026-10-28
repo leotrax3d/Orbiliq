@@ -1,6 +1,7 @@
 package org.orbiliq.app
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,6 +15,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var conversations: ConversationRepository
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         setContent { InboxRoute(conversations, onProviderSetup = {
             startActivity(android.content.Intent(this, org.orbiliq.app.signal.SignalSetupActivity::class.java))

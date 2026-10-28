@@ -39,10 +39,10 @@ class UnifiedCommunicationService(
         if (session.accountId != route.conversation.ref.accountId) return Availability.Unknown
         val scope = CapabilityScope.Conversation(route.providerId, route.conversation.ref)
         val textSupport = session.evaluate(OperationRequest(scope, Operations.SendText,
-            textLength = text.length, targetKind = route.conversation.kind))
+            textLength = text.length, sizeBytes = text.toByteArray(Charsets.UTF_8).size.toLong(), targetKind = route.conversation.kind))
         if (textSupport !is Availability.Available || reply == null) return textSupport
         return session.evaluate(OperationRequest(scope, Operations.Reply,
-            textLength = text.length, targetKind = route.conversation.kind))
+            textLength = text.length, sizeBytes = text.toByteArray(Charsets.UTF_8).size.toLong(), targetKind = route.conversation.kind))
     }
 
     override suspend fun sendText(target: ConversationTarget, route: SendRoute, text: String, replyTo: MessageId?): SendTextResult {

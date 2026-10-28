@@ -15,6 +15,7 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
     private val transport = AndroidSignalMessaging(context.applicationContext)
     private val ready = CompletableDeferred<LocalRepository>()
     private val account = MutableStateFlow<AccountId?>(null)
+    private val notice = MutableStateFlow<String?>("Signal-Companion fehlt oder Nachrichtenzugriff ist noch nicht freigegeben.")
     @Volatile private var session: SignalMessagingSession? = null
     init {
         scope.launch {
@@ -30,6 +31,7 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
                     if (id != account.value) {
                         coordinator?.cancelAndJoin(); session?.close(); session = null
                         account.value = null
+                        notice.value = "Signal-Companion ist nicht verfügbar oder der Nachrichtenzugriff fehlt."
                         if (binding != null && id != null) {
                             repository.saveAccount(SignalMessagingSession.accountFor(binding))
                             val snapshot = repository.snapshot()
@@ -39,20 +41,30 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
                             val next = SignalMessagingSession(binding, transport, snapshot.messages.filter { it.route.accountId == id }.mapNotNull { it.ref }, commands)
                             session = next
                             account.value = id
-                            coordinator = launch { SyncCoordinator(repository, next).run() }
+                            notice.value = null
+                            coordinator = launch {
+                                launch { next.state.collect { state ->
+                                    notice.value = if (state.sync == org.orbiliq.core.provider.api.SyncState.Degraded)
+                                        "Signal-Synchronisation unterbrochen. Bitte den Companion prüfen." else null
+                                } }
+                                SyncCoordinator(repository, next).run()
+                            }
                         }
                     }
                     delay(2000)
                 }
             } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { ready.completeExceptionally(IllegalStateException("signal.storage.unavailable")) }
+            catch (_: Exception) {
+                notice.value = "Der lokale Signal-Speicher ist nicht verfügbar."
+                ready.completeExceptionally(IllegalStateException("signal.storage.unavailable"))
+            }
         }
     }
     private suspend fun communication() = UnifiedCommunicationService(ready.await(), { id -> session?.takeIf { it.accountId == id } })
     override fun observeMessenger(): Flow<MessengerSnapshot> = flow {
         emit(MessengerSnapshot(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptySet()))
         val repository = ready.await()
-        emitAll(combine(repository.observeState(), account) { s, active ->
+        emitAll(combine(repository.observeState(), account, notice) { s, active, syncNotice ->
             val latest = s.messages.filter { it.route.accountId == active }.groupBy { it.route }.mapValues { it.value.maxWith(Message.timelineOrder) }
             val identities = s.identities.filter { it.ref.accountId == active }
             val identityIds = identities.map { it.id }.toSet()
@@ -62,7 +74,7 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
                 s.accounts.find { it.id == active }?.let { UnifiedInboxEntry(SendRoute(it.providerId, c), latest[c.ref]) }
             }.sortedByDescending { it.latestMessage?.displayTime }, s.people.filter { it.id in peopleIds },
                 identities, links,
-                s.accounts.filter { it.id == active }, s.archived)
+                s.accounts.filter { it.id == active }, s.archived, syncNotice = syncNotice)
         })
     }.flowOn(Dispatchers.IO)
     override fun observeInbox(): Flow<List<ConversationSummary>> = observeMessenger().map { s ->

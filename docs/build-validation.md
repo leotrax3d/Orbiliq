@@ -579,6 +579,31 @@ Der korrigierte Companion-Lauf 40668223010 hat den Schritt
 Das ist noch kein erfolgreiches Device Linking.
 # Fortsetzung Signal am 28.10.2026 im neuen Windows-Workspace
 
+## Nachrichtenadapter: letzter lokaler Gesamtstand vor Geräteabnahme
+
+Windows, JDK 17, ein Worker, zwei CPUs, maximal 2 GiB JVM-Heap:
+
+```text
+:core:model:test :core:provider-api:test :core:provider-signal:test
+:core:data:test :core:provider-mock:test :app:assembleDebug
+:app:assembleDebugAndroidTest :app:lintDebug :feature:inbox:testDebugUnitTest
+```
+
+**BUILD SUCCESSFUL in 50s**, 190 Tasks. XML-Nachweis: 142 JVM-Tests, 0 Fehler,
+0 Fehlschläge: Model 26, Provider API 19, Signal 23, Data 29, Mock 44, Inbox 1.
+Lint: 0 Fehler/11 Warnungen. Aktuelle App-APK SHA-256
+`caf8c4d67d5ff2438b4f3b989967c3897c642a92467c8c37660cb9c522242a56`,
+Test-APK `f61986cf3344aba6872fd39a560104326c71ebb6bf841b3d0cc7bcb6b70a81bd`.
+Keine nicht ausgeführten Instrumentationstests daraus ableiten.
+
+Python: neun Generator-/Security-Manifest-/Upstream-Tests bestanden, einschließlich
+Abgleich des tatsächlichen 2-KiB-Inline-Textlimits und expliziter Driftablehnung.
+Native CI 40699016698 (`6e185da`) und 40705057485 (`1d820af`) erfolgreich. Diese
+Artefakte enthalten noch nicht die danach ergänzten UTF-8-/universeller-Timer-
+Korrekturen. Aktueller Companion muss neu gebaut und erst dann auf dem Gerät
+abgenommen werden. Keine neue Nachrichtenzustimmung und keine neue reale Signal-
+Nachricht über Orbiliq bisher als bestanden behauptet.
+
 **Echter Account-/Sessionnachtrag:** Nutzer hat Linking mit ursprünglicher Signal-App
 abgeschlossen. Neuer opt-in Hardwaretest bestätigt über die reguläre Providergrenze
 den lokalen Zustand `Linked`. Vier Tests bestanden (0,255 s), Folgemessung nach

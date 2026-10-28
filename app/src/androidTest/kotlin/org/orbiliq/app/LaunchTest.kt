@@ -14,7 +14,7 @@ class LaunchTest {
     private fun assertInboxState() {
         // Existing device data may have archived every seeded chat. Verify a loaded inbox,
         // without resetting data or requiring a particular unarchived fixture.
-        val expected = if (BuildConfig.MOCK_MESSENGER) "Chats und letzte Nachricht suchen" else "Noch keine Unterhaltungen"
+        val expected = "Chats und letzte Nachricht suchen"
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText(expected)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(expected).assertIsDisplayed()
     }
@@ -23,6 +23,7 @@ class LaunchTest {
         assertInboxState()
     }
     @Test fun launchesAndExplainsMissingAccounts() {
+        org.junit.Assert.assertTrue(compose.activity.window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE != 0)
         compose.onNodeWithText("Orbiliq").assertIsDisplayed()
         assertInboxState()
     }

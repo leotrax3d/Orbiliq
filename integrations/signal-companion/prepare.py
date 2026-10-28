@@ -34,6 +34,7 @@ SECURITY_FILES = (
     "app/src/main/java/org/orbiliq/signal/bridge/BridgeConsentActivity.kt",
     "app/src/main/java/org/orbiliq/core/provider/signal/SignalMessaging.kt",
     "app/src/main/java/org/thoughtcrime/securesms/database/MessageTable.kt",
+    "lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/messages/SignalServiceMessageLimits.kt",
 )
 
 
@@ -63,6 +64,15 @@ def verify_security_manifest(checkout: Path):
     expected = {name: hashlib.sha256((checkout / name).read_bytes()).hexdigest() for name in SECURITY_FILES}
     if manifest.get("files") != expected:
         raise RuntimeError("Regenerate companion source: security files changed")
+
+
+def validate_wire_limit(checkout: Path):
+    path = checkout / "lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/messages/SignalServiceMessageLimits.kt"
+    native = re.search(r"MAX_INLINE_BODY_SIZE_BYTES: Int = (\d+)\.kibiBytes", path.read_text())
+    shared = ROOT / "core/provider-signal/src/main/kotlin/org/orbiliq/core/provider/signal/SignalMessaging.kt"
+    declared = re.search(r"const val MAX_TEXT_BYTES = (\d+)", shared.read_text())
+    if not native or not declared or int(native[1]) * 1024 != int(declared[1]):
+        raise RuntimeError("Upstream inline text wire limit changed; review provider constraints")
 
 
 def run(*args, cwd=None):
@@ -144,6 +154,7 @@ def block_primary_registration(checkout: Path):
 def configure(checkout: Path):
     if run("git", "rev-parse", "HEAD", cwd=checkout) != REVISION:
         raise RuntimeError("Unexpected upstream revision")
+    validate_wire_limit(checkout)
     block_primary_registration(checkout)
     message_table = checkout / "app/src/main/java/org/thoughtcrime/securesms/database/MessageTable.kt"
     table_text = message_table.read_text()

@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -18,8 +19,8 @@ class SignalSetupNavigationTest {
         compose.onNodeWithText("Konten").performClick()
         compose.onNodeWithText("Signal Companion · Einrichtung (experimentell)").performClick()
         compose.onNodeWithText("Signal einrichten").assertIsDisplayed()
-        compose.onNodeWithText("Nachrichten sind in Orbiliq noch nicht verfügbar.", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Zurück").performClick()
+        compose.onNodeWithText("Geräteverknüpfung und Schlüsselverwaltung laufen in einer separaten App.", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Zurück").performScrollTo().performClick()
         compose.onNodeWithText("Signal Companion · Einrichtung (experimentell)").assertIsDisplayed()
     }
 }

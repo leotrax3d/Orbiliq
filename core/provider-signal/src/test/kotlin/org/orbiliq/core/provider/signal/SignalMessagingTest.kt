@@ -41,7 +41,11 @@ class SignalMessagingTest {
     private suspend fun running(peer: Peer, block: suspend (SignalMessagingSession, MutableList<EventEnvelope>) -> Unit) = coroutineScope {
         val session = SignalMessagingSession(binding, peer, clock = clock, pollMillis = 10)
         val events = CopyOnWriteArrayList<EventEnvelope>()
-        val collector = launch { session.events().collect { events += it } }
+        val collector = launch {
+            try { session.events().collect { events += it } }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { /* Tests can inspect the fail-closed state after a source failure. */ }
+        }
         try {
             withTimeout(5000) { session.state.first { it.sync == SyncState.Gap } }
             block(session, events)
@@ -156,5 +160,30 @@ class SignalMessagingTest {
         session.close()
         peer.current = null
         assertThrows(IllegalArgumentException::class.java) { runBlocking { factory.open(AccountHandle(account, binding.id)) } }
+    }
+    @Test fun failedProjectionCommitEndsStreamAndUncommittedMessageReplays() = runBlocking<Unit> {
+        val peer = Peer(binding).apply { rows[11] = text() }
+        val session = SignalMessagingSession(binding, peer, clock = clock, pollMillis = 10)
+        try {
+            var failed = false
+            try {
+                withTimeout(5000) { session.events().collect {
+                    if (it.payload is ProviderEvent.MessageUpserted) throw IllegalStateException("synthetic commit failure")
+                } }
+            } catch (_: IllegalStateException) { failed = true }
+            assertTrue("Projection failure was swallowed", failed)
+            val replay = withTimeout(5000) { session.events().first { it.payload is ProviderEvent.MessageUpserted } }
+            assertTrue((replay.payload as ProviderEvent.MessageUpserted).message.ref?.remoteMessageId == "11")
+        } finally { session.close() }
+    }
+    @Test fun utf8WireLimitIsCheckedBeforeNativeQueueForMultibyteText() = runBlocking {
+        val peer = Peer(binding)
+        running(peer) { session, _ ->
+            val tooLarge = command(session, CommandPayload.SendText("界".repeat(683)))
+            assertTrue(session.execute(tooLarge) is DispatchResult.Rejected)
+            assertEquals(0, peer.sendCalls)
+            assertTrue(session.execute(command(session, CommandPayload.SendText("ä".repeat(1024)))) is DispatchResult.Accepted)
+            assertEquals(1, peer.sendCalls)
+        }
     }
 }

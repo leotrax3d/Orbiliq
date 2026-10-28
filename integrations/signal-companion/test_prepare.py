@@ -11,12 +11,13 @@ import subprocess
 import tempfile
 import unittest
 
-from prepare import REVISION, SECURITY_FILES, block_primary_registration, verify_security_manifest, security_policy_digest
+from prepare import REVISION, SECURITY_FILES, block_primary_registration, verify_security_manifest, security_policy_digest, validate_wire_limit
 
 SOURCE = os.environ.get("SIGNAL_UPSTREAM_SOURCE")
 REGISTRATION = "feature/registration/src/main/java/org/signal/registration/"
 INPUTS = (SECURITY_FILES[6], SECURITY_FILES[7], REGISTRATION + "RegistrationActivity.kt",
-          REGISTRATION + "RegistrationViewModel.kt")
+          REGISTRATION + "RegistrationViewModel.kt",
+          "lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/messages/SignalServiceMessageLimits.kt")
 
 
 @unittest.skipUnless(SOURCE, "Set SIGNAL_UPSTREAM_SOURCE for pinned upstream integration tests")
@@ -68,6 +69,13 @@ class RegistrationGeneratorTest(unittest.TestCase):
         path.write_text(path.read_text().replace("private fun applyNavigateBackToScreenEvent(", "private fun changedUpstream("))
         with self.assertRaisesRegex(RuntimeError, "back navigation changed"):
             block_primary_registration(self.root)
+
+    def test_wire_constraints_match_the_actual_pinned_upstream(self):
+        validate_wire_limit(self.root)
+        path = self.root / INPUTS[4]
+        path.write_text(path.read_text().replace("2.kibiBytes", "3.kibiBytes"))
+        with self.assertRaisesRegex(RuntimeError, "wire limit changed"):
+            validate_wire_limit(self.root)
 
 
 class SourceManifestTest(unittest.TestCase):

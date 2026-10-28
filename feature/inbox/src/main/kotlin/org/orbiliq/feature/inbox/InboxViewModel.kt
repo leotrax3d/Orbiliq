@@ -30,6 +30,11 @@ class InboxViewModel(repository: ConversationRepository) : ViewModel() {
     private val _notice = MutableStateFlow<String?>(null)
     val notice = _notice.asStateFlow()
     fun clearNotice() { _notice.value = null }
+    suspend fun textConstraints(route: SendRoute): OperationConstraints? = try {
+        (messenger?.sendRoutes(ConversationTarget.ProviderChat(route.conversation.ref), "x", null)
+            ?.find { it.route.conversation.ref == route.conversation.ref }?.availability as? Availability.Available)?.constraints
+    } catch (c: CancellationException) { throw c }
+      catch (_: Exception) { null }
     suspend fun canSend(route: SendRoute, text: String, reply: MessageId?): Boolean = try {
         messenger?.sendRoutes(ConversationTarget.ProviderChat(route.conversation.ref), text.ifBlank { " " }, reply)
             ?.any { it.route.conversation.ref == route.conversation.ref && it.availability is Availability.Available } == true

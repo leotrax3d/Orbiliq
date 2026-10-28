@@ -2,6 +2,38 @@
 
 Stand: 28.10.2026. Prompt 11 ist **nicht abgeschlossen**.
 
+## Neuester Fortsetzungsstand: Nachrichtenadapter implementiert, Geräteabnahme offen
+
+**Für die nächste Agentenübernahme zuerst den vollständigen
+[Übergabeprompt](SIGNAL_NEXT_AGENT_PROMPT.md) lesen.** Nutzer verlangt explizit,
+vor Kontext-/Nutzungslimit alles zu pushen und einen Fortsetzungsprompt bereitzulegen.
+
+Aktueller Code: eigener kontogebundener Nachrichten-Consent, Protokoll v2,
+normaler Direkttextversand/-empfang, readonly Gruppentitel/-texte, stabile
+Keyset-Seiten aus der nativen DB, verschlüsselter Command-Claim vor Native-Send,
+Generische Outbox-/Sync-Einbindung, UTF-8-Bytegrenze und geschützte Hauptansicht.
+Medien, Gruppenversand/-verwaltung, Replies und Reaktionen sind weiterhin offen.
+Sie dürfen nicht durch einfaches Anschalten von Capabilities als fertig gelten.
+
+Wichtiger Upstream-Befund: Inline-Texte sind auf 2048 UTF-8-Bytes begrenzt,
+längere Texte benötigen Long-Text-Anhänge. Generierung gleicht dieses Limit mit
+der tatsächlichen nativen Konstante ab. Normaler Versand berücksichtigt zusätzlich,
+ob der universelle Timer den Chat automatisch in einen verschwindenden Chat
+umstellen würde. Keine Timer-/View-once-Umgehung.
+
+Letzter vollständiger lokaler Lauf: **142 JVM-Tests ohne Fehler**, App-/Test-APK
+und Lint erfolgreich, 50 s. Darunter 23 Signal-, 29 Data-, 44 Mocktests. Lint
+0 Fehler/11 Warnungen. Neun Python-Generator-/Manifest-/Drifttests bestanden.
+Messaging-Gerätetests noch nicht ausgeführt; installierter Companion ist weiterhin
+der alte korrigierte Linking-Build aus 40668223010.
+
+Native CI: 40699016698 (`6e185da`, Protokoll v1) und 40705057485 (`1d820af`,
+Protokoll v2) erfolgreich. Beide liegen vor den aktuellen UTF-8-/Timer-Korrekturen;
+nicht als endgültigen Stand installieren/abnehmen. Ein neuer aktueller CI-Lauf
+wird auf diesem Branch gestartet und seine Run-ID separat nachgetragen.
+Keine neue Deinstallation oder Original-Signal-Änderung nötig. Gleicher lokaler
+Signer: `install -r` bewahrt die bereits erfolgreich verknüpfte Session.
+
 ## Fortsetzung im neuen Workspace am 28.10.2026
 
 ### Geräteverbindung und Signierschlüssel

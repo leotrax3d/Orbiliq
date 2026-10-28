@@ -4,7 +4,8 @@ package org.orbiliq.core.provider.signal
 /** Separate opt-in protocol. The v1 status grant never permits these operations. */
 object SignalMessagingContract {
     const val VERSION = 2
-    const val MAX_TEXT = 4000
+    const val MAX_TEXT = 2048
+    const val MAX_TEXT_BYTES = 2048
     const val PAGE_SIZE = 50
     const val MAX_THREADS = 1000
 }
@@ -26,6 +27,7 @@ class SignalText(
     init {
         require(id > 0 && thread > 0 && timestamp > 0 && received > 0)
         require(if (supported) text.isNotEmpty() && text.length <= SignalMessagingContract.MAX_TEXT else text.isEmpty())
+        require(!supported || text.toByteArray(Charsets.UTF_8).size <= SignalMessagingContract.MAX_TEXT_BYTES)
         require(sender == "self" || sender.matches(Regex("[0-9]+|service:[0-9a-f]{64}")))
         require(senderName.length <= 512)
         require(delivery in setOf("Pending", "Sent", "Delivered", "Read", "Failed"))

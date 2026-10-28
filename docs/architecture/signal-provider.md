@@ -27,8 +27,10 @@ Eine kleine zusätzliche native MessageTable-Methode verwendet stabile ID-Keyset
 statt veränderlicher OFFSET-Seiten. Geschichten, geplante Nachrichten und überholte
 Editrevisionen werden aus der Seitenauswahl ausgeschlossen.
 
-Die erste Ausbaustufe exportiert normale Direktchat- und Gruppentexte bis 4000
-UTF-16-Codeeinheiten. View-once-Inhalte, verschwindende Nachrichten und Chats mit
+Die erste Ausbaustufe exportiert normale Direktchat- und Gruppentexte bis 2048
+UTF-8-Bytes. Größere Texte benötigen upstream einen Long-Text-Anhang; der Adapter
+gibt dafür bisher einen Platzhalter aus. Die Grenze wird gegen die tatsächliche
+Upstream-Konstante geprüft. View-once-Inhalte, verschwindende Nachrichten und Chats mit
 aktivem Expire-Timer werden nicht in den Kern kopiert. Gruppen sind zunächst nur
 lesbar; Medien bleiben im nativen Client und erhalten einen Inhaltsplatzhalter.
 Bekannte lokale Nachrichten werden gegen die
@@ -73,7 +75,7 @@ Typing, Read-Receipt-Versand, Suche, Calls und Stories werden nicht freigegeben.
 Diese Liste beschreibt die implementierte Adapterstrecke, nicht alle Fähigkeiten
 des zugrunde liegenden nativen Clients.
 
-Zehn neue JVM-Tests prüfen unter anderem unbekannte Wirkung ohne Resend,
+Dreizehn neue JVM-Tests prüfen unter anderem unbekannte Wirkung ohne Resend,
 Accountwechsel, fremde Routen, Snapshot-Deduplizierung und Löschereignisse.
 Ein zusätzlicher Persistenztest schützt gegen fälschlich bestätigte native Queues
 und gegen das Überschreiben späterer Versandfehler. Opt-in Gerätetests prüfen

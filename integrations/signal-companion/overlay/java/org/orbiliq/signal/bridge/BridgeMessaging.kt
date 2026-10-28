@@ -23,6 +23,7 @@ import org.thoughtcrime.securesms.mms.OutgoingMessage
 import org.thoughtcrime.securesms.service.KeyCachingService
 import org.thoughtcrime.securesms.sms.MessageSender
 import org.thoughtcrime.securesms.recipients.Recipient
+import org.whispersystems.signalservice.api.messages.SignalServiceMessageLimits
 
 /** No protocol keys leave SignalStore. All exported payloads require a second native grant. */
 internal class BridgeMessaging(private val context: Context) {
@@ -34,6 +35,9 @@ internal class BridgeMessaging(private val context: Context) {
   private val grant = AtomicFile(File(context.noBackupFilesDir, "orbiliq-message-grant-v1"))
   private fun identity(recipient: Recipient): String = if (recipient.isSelf) "self" else
     recipient.serviceId.orElse(null)?.let { "service:" + hash(it.toString()) } ?: recipient.id.toLong().toString()
+  private fun canSendNormal(recipient: Recipient, thread: Long): Boolean =
+    !recipient.isGroup && recipient.isRegistered && !recipient.isBlocked && recipient.expiresInSeconds == 0 &&
+      (SignalStore.settings.universalExpireTimer == 0 || !SignalDatabase.messages.canSetUniversalTimer(thread))
   private fun currentBinding(): String {
     check(!KeyCachingService.isLocked(context))
     check(SignalStore.account.isRegistered && !SignalStore.account.isPrimaryDevice && !SignalStore.account.isUnauthorizedReceived)
@@ -72,7 +76,7 @@ internal class BridgeMessaging(private val context: Context) {
               putString("title", recipient.getDisplayName(context).take(512))
               putBoolean("direct", !recipient.isGroup)
               putString("peer", identity(recipient))
-              putBoolean("canSend", !recipient.isGroup && recipient.isRegistered && !recipient.isBlocked && recipient.expiresInSeconds == 0)
+              putBoolean("canSend", canSendNormal(recipient, record.threadId))
             }
           }
         }
@@ -81,7 +85,7 @@ internal class BridgeMessaging(private val context: Context) {
         if (rows.none { it.getLong("id") == selfThread }) rows += Bundle().apply {
           putLong("id", selfThread); putString("title", "Notiz an mich")
           putBoolean("direct", true); putString("peer", "self")
-          putBoolean("canSend", self.expiresInSeconds == 0)
+          putBoolean("canSend", canSendNormal(self, selfThread))
         }
         val afterThread = extras.getLong("afterThread", 0L)
         require(afterThread >= 0)
@@ -132,6 +136,7 @@ internal class BridgeMessaging(private val context: Context) {
         !message.isSecure || !message.isLatestRevision || message.isViewOnce || message.isRemoteDelete || message.expiresIn != 0L ||
         message.isUpdate) return null
     val supported = message.body.isNotEmpty() && message.body.length <= SignalMessagingContract.MAX_TEXT &&
+      message.body.toByteArray(Charsets.UTF_8).size <= SignalServiceMessageLimits.MAX_INLINE_BODY_SIZE_BYTES &&
       SignalDatabase.attachments.getAttachmentsForMessage(message.id).all { it.quote }
     return Bundle().apply {
       putLong("id", message.id); putLong("thread", message.threadId)
@@ -165,8 +170,10 @@ internal class BridgeMessaging(private val context: Context) {
     if (method == "messageReconcile") return Bundle().apply { putString("result", "Unknown") }
     val text = requireNotNull(extras.getString("text"))
     require(text.isNotEmpty() && text.length <= SignalMessagingContract.MAX_TEXT)
+    require(text.toByteArray(Charsets.UTF_8).size <= SignalServiceMessageLimits.MAX_INLINE_BODY_SIZE_BYTES)
     val recipient = SignalDatabase.threads.getRecipientForThreadId(thread)
-    check(recipient != null && (recipient.isIndividual || recipient.isSelf) && recipient.isRegistered && !recipient.isBlocked && recipient.expiresInSeconds == 0)
+    if (recipient == null || (!recipient.isIndividual && !recipient.isSelf) || !canSendNormal(recipient, thread))
+      return Bundle().apply { putString("result", "Rejected") }
     check(state.length() < 100_000)
     val timestamp = maxOf(System.currentTimeMillis(), state.optLong("lastTimestamp", 0L) + 1)
     entry = JSONObject().put("thread", thread).put("timestamp", timestamp).put("bodyHash", hash(text))

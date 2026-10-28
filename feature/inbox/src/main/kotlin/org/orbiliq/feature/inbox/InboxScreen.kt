@@ -110,6 +110,7 @@ private fun MessengerApp(model: InboxViewModel, appearance: String, dynamic: Boo
                             Text("Signal Companion · Einrichtung (experimentell)")
                         }
                     }
+                    snapshot?.syncNotice?.let { Text(it, Modifier.padding(horizontal = 20.dp, vertical = 12.dp), style = MaterialTheme.typography.bodySmall) }
                     when (state) {
                         MessengerState.Loading -> LoadingState()
                         MessengerState.Error -> EmptyState("Laden fehlgeschlagen", "Die lokalen Daten sind gerade nicht verfügbar.", "Erneut versuchen", model::retry)
@@ -235,9 +236,10 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
     var sending by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf(false) }
     var archiveDialog by remember { mutableStateOf(false) }
-    val allowed by produceState<Boolean?>(null, route, draft, replyId, timeline) {
+    val allowed by produceState<Boolean?>(null, route, draft, replyId, timeline, snapshot.syncNotice) {
         value = model.canSend(route, draft.trim(), replyId?.let(::MessageId))
     }
+    val textConstraints by produceState<OperationConstraints?>(null, route, snapshot.syncNotice) { value = model.textConstraints(route) }
     val scope = rememberCoroutineScope()
     val list = rememberLazyListState()
     val ownIds = snapshot.accounts.mapNotNull { it.ownIdentityId }.toSet()
@@ -277,7 +279,7 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                             message.replyTo?.let { id -> Text("↳ ${messageText(timeline.messages.find { it.id == id }).take(80)}", style = MaterialTheme.typography.labelMedium) }
                             Text(messageText(message), style = MaterialTheme.typography.bodyLarge)
                             Text("${time(message)} · ${route.providerId.value}${if (outgoing) " · ${deliveryLabel(message.delivery)}" else ""}", style = MaterialTheme.typography.labelSmall)
-                            val canReply by produceState(false, route, message.ref) { value = message.ref != null && model.canSend(route, "x", message.id) == true }
+                            val canReply by produceState(false, route, message.ref, snapshot.syncNotice) { value = message.ref != null && model.canSend(route, "x", message.id) == true }
                             if (canReply && message.content is MessageContent.Text) TextButton(onClick = { replyId = message.id.value }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Antworten") }
                         }
                     }
@@ -293,7 +295,10 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
         if (allowed == false) Text("Dieser Versandweg ist momentan nicht verfügbar. Dein Entwurf bleibt erhalten.", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelMedium)
         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             OutlinedTextField(draft, { draft = it }, Modifier.weight(1f), label = { Text("Nachricht über ${if (snapshot.simulation) "Mock" else route.providerId.value}") }, shape = MaterialTheme.shapes.extraLarge, maxLines = 5, enabled = !sending,
-                supportingText = { Text("${draft.length} Zeichen") })
+                supportingText = {
+                    val limit = textConstraints?.maxBytes
+                    Text(if (limit == null) "${draft.length} Zeichen" else "${draft.toByteArray(Charsets.UTF_8).size}/$limit Byte")
+                }, isError = textConstraints?.maxBytes?.let { draft.toByteArray(Charsets.UTF_8).size > it } == true)
             FilledIconButton(onClick = {
                 scope.launch {
                     sending = true

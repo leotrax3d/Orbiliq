@@ -59,7 +59,12 @@ class CheckedProviderSession(
         }
         val scope = message?.let { CapabilityScope.Message(descriptor.id, it) }
             ?: CapabilityScope.Conversation(descriptor.id, command.route)
-        val request = OperationRequest(scope, command.payload.operation, textLength = textLength)
+        val textBytes = when (val payload = command.payload) {
+            is CommandPayload.SendText -> payload.text.toByteArray(Charsets.UTF_8).size.toLong()
+            is CommandPayload.EditText -> payload.text.toByteArray(Charsets.UTF_8).size.toLong()
+            else -> null
+        }
+        val request = OperationRequest(scope, command.payload.operation, textLength = textLength, sizeBytes = textBytes)
         if (evaluate(request) !is Availability.Available) return rejected(FailureCategory.CapabilityUnavailable)
         return delegate.execute(command)
     }

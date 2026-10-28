@@ -7,6 +7,11 @@ ist im Code angelegt (separate kontogebundene Nachrichtenzustimmung, paginierte 
 Quelle, generische Outbox/Sync und verschlüsselter Command-Claim ohne Blind-Resend).
 Neue Messaging-Gerätetests stehen aus; die bisher installierte Companion-APK bietet
 noch keinen Nachrichtenzugriff. Kein Abschluss oder Messaging-Abnahmenachweis.
+Aktuellster lokaler Nachweis: 142 relevante JVM-Tests und neun Python-Generatortests
+bestanden; App-/Test-APK und Lint (0 Fehler/11 Warnungen) erfolgreich. Native
+Nachrichten-Builds bis `1d820af` erfolgreich, jüngere 2-KiB-/Timer-Korrekturen benötigen
+einen neuen Companion-Lauf. Zur sicheren Fortsetzung dient der
+[vollständige Agentenprompt](SIGNAL_NEXT_AGENT_PROMPT.md).
 
 Nachtrag 28.10.2026: Fortsetzung von Prompt 11 auf Basis des Branches
 `codex/signal-provider-tests`. Zusätzliche Linking-Sperren für wiederhergestellte
