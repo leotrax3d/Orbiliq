@@ -14,7 +14,7 @@ class SignalBinding(val id: String) {
     override fun toString() = "SignalBinding(redacted)"
 }
 class SignalThread(val id: Long, val title: String, val direct: Boolean, val canSend: Boolean, val peer: String) {
-    init { require(id > 0); require(title.length <= 512); require(peer == "self" || peer.matches(Regex("[0-9]+"))) }
+    init { require(id > 0); require(title.length <= 512); require(peer == "self" || peer.matches(Regex("[0-9]+|service:[0-9a-f]{64}"))) }
     override fun toString() = "SignalThread(redacted)"
 }
 class SignalText(
@@ -24,7 +24,7 @@ class SignalText(
     init {
         require(id > 0 && thread > 0 && timestamp > 0 && received > 0)
         require(text.isNotEmpty() && text.length <= SignalMessagingContract.MAX_TEXT)
-        require(sender == "self" || sender.matches(Regex("[0-9]+")))
+        require(sender == "self" || sender.matches(Regex("[0-9]+|service:[0-9a-f]{64}")))
         require(delivery in setOf("Pending", "Sent", "Delivered", "Read", "Failed"))
     }
     override fun toString() = "SignalText(redacted)"

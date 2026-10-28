@@ -45,8 +45,23 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
     private fun rows(bundle: Bundle): List<Bundle> = requireNotNull(bundle.getParcelableArrayList<Bundle>("rows")).also {
         require(it.size <= SignalMessagingContract.MAX_THREADS)
     }
-    override suspend fun threads(binding: SignalBinding): List<SignalThread> = rows(call("messageThreads", binding)).map {
-        SignalThread(it.getLong("id"), requireNotNull(it.getString("title")), it.getBoolean("direct"), it.getBoolean("canSend"), requireNotNull(it.getString("peer")))
+    override suspend fun threads(binding: SignalBinding): List<SignalThread> {
+        val result = mutableListOf<SignalThread>()
+        var after = 0L
+        do {
+            val bundle = call("messageThreads", binding, Bundle().apply { putLong("afterThread", after) })
+            val page = rows(bundle).map {
+                SignalThread(it.getLong("id"), requireNotNull(it.getString("title")), it.getBoolean("direct"), it.getBoolean("canSend"), requireNotNull(it.getString("peer")))
+            }
+            require(page.size <= SignalMessagingContract.PAGE_SIZE && page.all { it.id > after })
+            result += page
+            require(result.size <= SignalMessagingContract.MAX_THREADS)
+            val next = bundle.getLong("nextAfterThread")
+            if (next == 0L) break
+            require(next > after)
+            after = next
+        } while (true)
+        return result
     }
     private fun decode(bundle: Bundle): List<SignalText> = rows(bundle).also { require(it.size <= SignalMessagingContract.PAGE_SIZE) }.map {
         SignalText(it.getLong("id"), it.getLong("thread"), requireNotNull(it.getString("sender")), requireNotNull(it.getString("text")),

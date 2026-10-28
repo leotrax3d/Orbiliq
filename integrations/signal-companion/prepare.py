@@ -29,11 +29,25 @@ SECURITY_FILES = (
     "lib/network/src/main/java/org/signal/network/api/RegistrationApiV2.kt",
     "lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/registration/RegistrationApi.kt",
     "app/src/main/java/org/orbiliq/signal/bridge/BridgeMessaging.kt",
+    "app/src/main/java/org/orbiliq/signal/bridge/BridgeAccess.kt",
     "app/src/main/java/org/orbiliq/signal/bridge/BridgeProvider.kt",
     "app/src/main/java/org/orbiliq/signal/bridge/BridgeConsentActivity.kt",
     "app/src/main/java/org/orbiliq/core/provider/signal/SignalMessaging.kt",
     "app/src/main/java/org/thoughtcrime/securesms/database/MessageTable.kt",
 )
+
+
+def security_policy_digest():
+    paths = [HERE / "prepare.py", *sorted((HERE / "overlay").rglob("*.kt")),
+             ROOT / "core/provider-signal/src/main/kotlin/org/orbiliq/core/provider/signal/SignalCompanion.kt",
+             ROOT / "core/provider-signal/src/main/kotlin/org/orbiliq/core/provider/signal/SignalMessaging.kt"]
+    digest = hashlib.sha256()
+    for path in paths:
+        digest.update(str(path.relative_to(ROOT)).replace("\\", "/").encode())
+        digest.update(b"\0")
+        digest.update(path.read_text(encoding="utf-8").encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def verify_security_manifest(checkout: Path):
@@ -44,6 +58,8 @@ def verify_security_manifest(checkout: Path):
     manifest = json.loads((checkout / "ORBILIQ-SECURITY.json").read_text())
     if manifest.get("version") != 2 or manifest.get("revision") != REVISION:
         raise RuntimeError("Regenerate companion source: obsolete security generation")
+    if manifest.get("policyDigest") != security_policy_digest():
+        raise RuntimeError("Regenerate companion source: generator policy changed")
     expected = {name: hashlib.sha256((checkout / name).read_bytes()).hexdigest() for name in SECURITY_FILES}
     if manifest.get("files") != expected:
         raise RuntimeError("Regenerate companion source: security files changed")
@@ -268,7 +284,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     )
     shutil.copyfile(ROOT / "LICENSE", checkout / "ORBILIQ-MIT-LICENSE")
     (checkout / "ORBILIQ-SECURITY.json").write_text(json.dumps({
-        "version": 2, "revision": REVISION,
+        "version": 2, "revision": REVISION, "policyDigest": security_policy_digest(),
         "files": {name: hashlib.sha256((checkout / name).read_bytes()).hexdigest() for name in SECURITY_FILES},
     }, indent=2) + "\n")
 

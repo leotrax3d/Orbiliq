@@ -48,6 +48,8 @@ internal class BridgeAccess(private val context: Context) {
 
   fun revoke() = synchronized(BridgeAccess::class.java) { grant.delete() }
 
+  fun currentClientSigner(): String = signers(SignalBridgeContract.CLIENT_PACKAGE).single()
+
   @Suppress("DEPRECATION")
   private fun signers(name: String): Set<String> = try {
     val pm = context.packageManager

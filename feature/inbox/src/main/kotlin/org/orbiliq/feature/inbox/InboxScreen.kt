@@ -153,7 +153,7 @@ private fun MessengerApp(model: InboxViewModel, appearance: String, dynamic: Boo
     }
     if (newChat && snapshot != null) ModalBottomSheet(onDismissRequest = { newChat = false }) {
         Text("Unterhaltung öffnen", Modifier.padding(24.dp), style = MaterialTheme.typography.headlineMedium)
-        Text("Vorhandene Mock-Chats", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodyLarge)
+        Text("Vorhandene Unterhaltungen", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodyLarge)
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp).navigationBarsPadding(), contentPadding = PaddingValues(16.dp)) {
             items(snapshot.entries) { entry -> ChatRow(entry) { chatId = entry.route.conversation.id.value; newChat = false } }
         }
@@ -192,7 +192,7 @@ private fun ChatRow(entry: UnifiedInboxEntry, modifier: Modifier = Modifier, cli
             Column(Modifier.weight(1f)) {
                 Text(entry.route.conversation.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(messageText(entry.latestMessage).ifEmpty { "Schreibe die erste Nachricht" }, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Mock · ${if (entry.route.conversation.kind == ConversationKind.Group) "Gruppe" else "Direktchat"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text("${entry.route.providerId.value} · ${if (entry.route.conversation.kind == ConversationKind.Group) "Gruppe" else "Direktchat"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             }
             entry.latestMessage?.let { Text(time(it), style = MaterialTheme.typography.labelSmall) }
         }
@@ -251,12 +251,12 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ Chats") }
             TextButton(onClick = { details = true }, modifier = Modifier.weight(1f)) {
-                Column { Text(route.conversation.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium); Text("Mock · lokal", style = MaterialTheme.typography.labelSmall) }
+                Column { Text(route.conversation.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium); Text(route.providerId.value, style = MaterialTheme.typography.labelSmall) }
             }
             TextButton(onClick = { archiveDialog = true }) { Text(if (archived) "Zurücklegen" else "Archiv") }
         }
         Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
-            Text("Lokaler Testchat · keine echte Messenger-Verbindung", Modifier.padding(horizontal = 20.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium)
+            Text(if (snapshot.simulation) "Lokaler Testchat · keine echte Messenger-Verbindung" else "Lokale Kopie · Sicherheitsnummer im Companion prüfen", Modifier.padding(horizontal = 20.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium)
         }
         if (timeline.messages.isEmpty()) Box(Modifier.weight(1f)) { EmptyState("Sag einfach Hallo", "Deine erste Nachricht startet diese Unterhaltung.") }
         else LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -276,8 +276,9 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                             if (!outgoing && route.conversation.kind == ConversationKind.Group) Text(snapshot.identities.find { it.ref == message.sender }?.displayName ?: "Teilnehmer", style = MaterialTheme.typography.labelMedium)
                             message.replyTo?.let { id -> Text("↳ ${messageText(timeline.messages.find { it.id == id }).take(80)}", style = MaterialTheme.typography.labelMedium) }
                             Text(messageText(message), style = MaterialTheme.typography.bodyLarge)
-                            Text("${time(message)} · Mock${if (outgoing) " · ${deliveryLabel(message.delivery)}" else ""}", style = MaterialTheme.typography.labelSmall)
-                            if (message.ref != null && message.content is MessageContent.Text) TextButton(onClick = { replyId = message.id.value }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Antworten") }
+                            Text("${time(message)} · ${route.providerId.value}${if (outgoing) " · ${deliveryLabel(message.delivery)}" else ""}", style = MaterialTheme.typography.labelSmall)
+                            val canReply by produceState(false, route, message.ref) { value = message.ref != null && model.canSend(route, "x", message.id) == true }
+                            if (canReply && message.content is MessageContent.Text) TextButton(onClick = { replyId = message.id.value }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Antworten") }
                         }
                     }
                 }
@@ -291,15 +292,15 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
         }
         if (allowed == false) Text("Dieser Versandweg ist momentan nicht verfügbar. Dein Entwurf bleibt erhalten.", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelMedium)
         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-            OutlinedTextField(draft, { draft = it }, Modifier.weight(1f), label = { Text("Nachricht über Mock") }, shape = MaterialTheme.shapes.extraLarge, maxLines = 5, enabled = !sending,
-                supportingText = { Text("${draft.length}/4096") }, isError = draft.length > 4096)
+            OutlinedTextField(draft, { draft = it }, Modifier.weight(1f), label = { Text("Nachricht über ${if (snapshot.simulation) "Mock" else route.providerId.value}") }, shape = MaterialTheme.shapes.extraLarge, maxLines = 5, enabled = !sending,
+                supportingText = { Text("${draft.length} Zeichen") })
             FilledIconButton(onClick = {
                 scope.launch {
                     sending = true
                     try { if (model.send(route, draft, replyId?.let(::MessageId))) { draft = ""; replyId = null } }
                     finally { sending = false }
                 }
-            }, enabled = draft.isNotBlank() && draft.trim().length <= 4096 && !sending && allowed == true,
+            }, enabled = draft.isNotBlank() && !sending && allowed == true,
                 modifier = Modifier.padding(bottom = 24.dp).size(56.dp).semantics { contentDescription = "Nachricht senden" }) {
                 if (sending) CircularProgressIndicator(Modifier.size(24.dp)) else MessengerIcon("Send")
             }
@@ -313,7 +314,7 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
         Column(Modifier.fillMaxWidth().padding(24.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Avatar(route.conversation.title)
             Text(route.conversation.title, style = MaterialTheme.typography.headlineMedium)
-            Text("Provider: ${route.providerId.value}\nKonto: ${snapshot.accounts.find { it.id == route.conversation.ref.accountId }?.displayName}\nSicherheit: lokale Simulation, keine zugesicherte E2EE")
+            Text("Provider: ${route.providerId.value}\nKonto: ${snapshot.accounts.find { it.id == route.conversation.ref.accountId }?.displayName}\nVerschlüsselung: ${route.conversation.security.encryption}\nIdentitätsprüfung: ${route.conversation.security.verification}")
             Text("${route.conversation.participants.size} Identitäten · ${if (route.conversation.kind == ConversationKind.Group) "Gruppe" else "Direktchat"}")
             if (linked != null) FilledTonalButton(onClick = { details = false; onPerson(linked.personId.value) }) { Text("Person ansehen") }
         }
@@ -386,6 +387,6 @@ private fun SettingsScreen(appearance: String, dynamic: Boolean, setAppearance: 
         item { Label("DATENSCHUTZ & SPEICHER") }
         item { Text("Nachrichten bleiben lokal verschlüsselt gespeichert. Keine Orbiliq-Cloud, keine Tracker. App-Lock und automatische Aufbewahrungsregeln sind noch nicht eingerichtet.", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodyLarge) }
         item { Label("ÜBER ORBILIQ") }
-        item { Text("Material 3 Expressive · Mock-Oberfläche\nOpen Source · MIT\nBewegungen folgen der systemweiten Animationseinstellung.", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodyMedium) }
+        item { Text("Material 3 Expressive · Orbiliq\nEigener App-Code: Open Source · MIT. Der separate Signal-Companion enthält AGPL-Code.\nBewegungen folgen der systemweiten Animationseinstellung.", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodyMedium) }
     }
 }

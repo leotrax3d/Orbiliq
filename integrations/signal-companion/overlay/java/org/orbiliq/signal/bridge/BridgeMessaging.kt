@@ -32,6 +32,8 @@ internal class BridgeMessaging(private val context: Context) {
       .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
   }
   private val grant = AtomicFile(File(context.noBackupFilesDir, "orbiliq-message-grant-v1"))
+  private fun identity(recipient: Recipient): String = if (recipient.isSelf) "self" else
+    recipient.serviceId.orElse(null)?.let { "service:" + hash(it.toString()) } ?: recipient.id.toLong().toString()
   private fun currentBinding(): String {
     check(!KeyCachingService.isLocked(context))
     check(SignalStore.account.isRegistered && !SignalStore.account.isPrimaryDevice && !SignalStore.account.isUnauthorizedReceived)
@@ -39,7 +41,7 @@ internal class BridgeMessaging(private val context: Context) {
   }
   fun approve() = synchronized(gate) {
     check(BridgeAccess(context).hasConsent())
-    val bytes = currentBinding().toByteArray(Charsets.UTF_8)
+    val bytes = (currentBinding() + ":" + BridgeAccess(context).currentClientSigner()).toByteArray(Charsets.UTF_8)
     val stream = grant.startWrite()
     try { stream.write(bytes); grant.finishWrite(stream) }
     catch (e: Exception) { grant.failWrite(stream); throw e }
@@ -48,7 +50,7 @@ internal class BridgeMessaging(private val context: Context) {
   private fun authorizedBinding(): String {
     check(BridgeAccess(context).hasConsent())
     val binding = currentBinding()
-    check(grant.readFully().toString(Charsets.UTF_8) == binding)
+    check(grant.readFully().toString(Charsets.UTF_8) == binding + ":" + BridgeAccess(context).currentClientSigner())
     return binding
   }
   fun call(method: String, extras: Bundle): Bundle = synchronized(gate) {
@@ -69,7 +71,7 @@ internal class BridgeMessaging(private val context: Context) {
               putLong("id", record.threadId)
               putString("title", recipient.getDisplayName(context).take(512))
               putBoolean("direct", true)
-              putString("peer", if (recipient.isSelf) "self" else recipient.id.toLong().toString())
+              putString("peer", identity(recipient))
               putBoolean("canSend", recipient.isRegistered && !recipient.isBlocked && recipient.expiresInSeconds == 0)
             }
           }
@@ -81,7 +83,14 @@ internal class BridgeMessaging(private val context: Context) {
           putBoolean("direct", true); putString("peer", "self")
           putBoolean("canSend", self.expiresInSeconds == 0)
         }
-        Bundle().apply { putParcelableArrayList("rows", rows) }
+        val afterThread = extras.getLong("afterThread", 0L)
+        require(afterThread >= 0)
+        val remaining = rows.filter { it.getLong("id") > afterThread }.sortedBy { it.getLong("id") }
+        val page = ArrayList(remaining.take(SignalMessagingContract.PAGE_SIZE))
+        Bundle().apply {
+          putParcelableArrayList("rows", page)
+          if (remaining.size > page.size) putLong("nextAfterThread", page.last().getLong("id"))
+        }
       }
       "messageTexts" -> {
         val thread = extras.getLong("thread")
@@ -124,7 +133,7 @@ internal class BridgeMessaging(private val context: Context) {
         message.isUpdate || message.body.isEmpty() || message.body.length > SignalMessagingContract.MAX_TEXT) return null
     return Bundle().apply {
       putLong("id", message.id); putLong("thread", message.threadId)
-      putString("sender", if (message.fromRecipient.isSelf) "self" else message.fromRecipient.id.toLong().toString())
+      putString("sender", identity(message.fromRecipient))
       putString("text", message.body); putBoolean("outgoing", message.isOutgoing)
       putLong("timestamp", message.dateSent); putLong("received", message.dateReceived)
       putString("delivery", when {

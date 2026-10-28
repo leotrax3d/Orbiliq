@@ -165,6 +165,7 @@ class SignalMessagingSession(
                             revision = revision(text.text + text.delivery), delivery = DeliveryState.valueOf(text.delivery),
                             quality = DataQuality.PartialHistory, security = security)
                         val command = commandMessages[message.ref]
+                        revisions.remove("deleted:${text.id}")
                         event(ProviderEvent.MessageUpserted(message, command), "message:${text.id}", "${message.revision}:${command?.value}")
                         ids.add(text.id)
                     }

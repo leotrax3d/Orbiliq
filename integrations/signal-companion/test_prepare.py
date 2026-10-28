@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import unittest
 
-from prepare import REVISION, SECURITY_FILES, block_primary_registration, verify_security_manifest
+from prepare import REVISION, SECURITY_FILES, block_primary_registration, verify_security_manifest, security_policy_digest
 
 SOURCE = os.environ.get("SIGNAL_UPSTREAM_SOURCE")
 REGISTRATION = "feature/registration/src/main/java/org/signal/registration/"
@@ -79,7 +79,7 @@ class SourceManifestTest(unittest.TestCase):
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("synthetic security fixture")
-        self.manifest = {"version": 2, "revision": REVISION, "files": {
+        self.manifest = {"version": 2, "revision": REVISION, "policyDigest": security_policy_digest(), "files": {
             name: hashlib.sha256((self.root / name).read_bytes()).hexdigest() for name in SECURITY_FILES}}
         self.save()
 
@@ -92,6 +92,12 @@ class SourceManifestTest(unittest.TestCase):
     def test_changed_security_file_is_rejected(self):
         (self.root / SECURITY_FILES[4]).write_text("stale navigation")
         with self.assertRaises(RuntimeError):
+            verify_security_manifest(self.root)
+
+    def test_stale_generator_policy_is_rejected(self):
+        self.manifest["policyDigest"] = "00" * 32
+        self.save()
+        with self.assertRaisesRegex(RuntimeError, "generator policy changed"):
             verify_security_manifest(self.root)
 
     def test_obsolete_generation_and_missing_entries_are_rejected(self):

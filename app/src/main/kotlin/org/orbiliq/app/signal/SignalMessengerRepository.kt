@@ -54,10 +54,14 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
         val repository = ready.await()
         emitAll(combine(repository.observeState(), account) { s, active ->
             val latest = s.messages.filter { it.route.accountId == active }.groupBy { it.route }.mapValues { it.value.maxWith(Message.timelineOrder) }
+            val identities = s.identities.filter { it.ref.accountId == active }
+            val identityIds = identities.map { it.id }.toSet()
+            val links = s.links.filter { it.identityId in identityIds }
+            val peopleIds = links.map { it.personId }.toSet()
             MessengerSnapshot(s.conversations.filter { it.ref.accountId == active }.mapNotNull { c ->
                 s.accounts.find { it.id == active }?.let { UnifiedInboxEntry(SendRoute(it.providerId, c), latest[c.ref]) }
-            }.sortedByDescending { it.latestMessage?.displayTime }, s.people,
-                s.identities.filter { it.ref.accountId == active }, s.links,
+            }.sortedByDescending { it.latestMessage?.displayTime }, s.people.filter { it.id in peopleIds },
+                identities, links,
                 s.accounts.filter { it.id == active }, s.archived)
         })
     }.flowOn(Dispatchers.IO)
@@ -77,5 +81,9 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
         check(route.conversation.ref.accountId == account.value)
         communication().sendText(target, route, text, replyTo)
     }
-    override suspend fun archiveConversation(id: ConversationId, archived: Boolean) = withContext(Dispatchers.IO) { ready.await().archive(id, archived) }
+    override suspend fun archiveConversation(id: ConversationId, archived: Boolean) = withContext(Dispatchers.IO) {
+        val repository = ready.await()
+        check(repository.snapshot().conversations.any { it.id == id && it.ref.accountId == account.value })
+        repository.archive(id, archived)
+    }
 }

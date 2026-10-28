@@ -2,6 +2,12 @@
 
 Stand: 27. Oktober 2026.
 
+Aktueller Entwicklungsnachtrag zu Prompt 11: Die [direkte Signal-Textstrecke](architecture/signal-provider.md)
+ist im Code angelegt (separate kontogebundene Nachrichtenzustimmung, paginierte native
+Quelle, generische Outbox/Sync und verschlüsselter Command-Claim ohne Blind-Resend).
+Neue Messaging-Gerätetests stehen aus; die bisher installierte Companion-APK bietet
+noch keinen Nachrichtenzugriff. Kein Abschluss oder Messaging-Abnahmenachweis.
+
 Nachtrag 28.10.2026: Fortsetzung von Prompt 11 auf Basis des Branches
 `codex/signal-provider-tests`. Zusätzliche Linking-Sperren für wiederhergestellte
 Registrierungszustände, Start-fresh und Rückwärtsnavigation; sieben Generator-Tests
