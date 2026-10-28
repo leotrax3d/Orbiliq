@@ -579,6 +579,16 @@ Der korrigierte Companion-Lauf 40668223010 hat den Schritt
 Das ist noch kein erfolgreiches Device Linking.
 # Fortsetzung Signal am 28.10.2026 im neuen Windows-Workspace
 
+**Echter Account-/Sessionnachtrag:** Nutzer hat Linking mit ursprünglicher Signal-App
+abgeschlossen. Neuer opt-in Hardwaretest bestätigt über die reguläre Providergrenze
+den lokalen Zustand `Linked`. Vier Tests bestanden (0,255 s), Folgemessung nach
+Prozessstart ebenfalls bestanden (0,301 s). Ein erster sofortiger Cold-Start-Test
+hatte 1/4 Fehler wegen kurzzeitigem `Unavailable`; nicht als bestanden gezählt.
+Test wartet jetzt höchstens 15 Sekunden ausschließlich auf Ende von `Unavailable`.
+Nach neuem Test-APK-Build und echtem Companion-Force-stop: **OK (4 tests), 3,569 s**.
+Belegt lokale Linked-Session nach Prozessneustart, keine Synchronisation oder
+Nachrichtenfunktion in Orbiliq. Temporäre QR-Bilder anschließend lokal entfernt.
+
 Neuester Hardware-Nachtrag: Nach ausdrücklicher Nutzerfreigabe nur die drei Testpakete
 `org.orbiliq.app`, `org.orbiliq.signal.companion`, `org.orbiliq.app.test` entfernt und
 mit gleichem lokalen Debug-Signer neu installiert. Alle Installationen erfolgreich.

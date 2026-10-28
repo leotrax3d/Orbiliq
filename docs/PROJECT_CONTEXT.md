@@ -13,6 +13,14 @@ libsignal/signal-cli fortgeschritten; Client-Kryptodependencies unverändert bei
 Kein neuer APK-/Account-/Linkingnachweis. Signal bleibt Setup/Status ohne Messaging-
 Capabilities; Prompt 11 und seine Definition of Done sind weiterhin offen.
 
+Weiterer Nachtrag: Echtes Device Linking auf dem Pixel vom Nutzer durchgeführt und
+über signaturgeschütztes Status-IPC als `Linked` bestätigt. Vier Hardwaretests
+einschließlich opt-in Linked-Erwartung bestanden, auch nach Companion-Prozessneustart
+(3,569 s; begrenzte Toleranz ausschließlich für anfängliches Unavailable). Nachweis
+erfolgte mit korrigiertem Companion aus CI 40668223010. Keine Messaging-Capabilities
+freigegeben. Sessionpersistenz ist damit für diesen Prozessneustart belegt; Sync,
+Empfang und Versand in Orbiliq bleiben Implementierungsarbeit.
+
 ## Produkt und verbindlicher Rahmen
 
 Orbiliq ist als lokale, datenschutzorientierte Unified-Messenger-App für Android geplant. Kotlin, Jetpack Compose, Material 3 Expressive, Coroutines/Flow und eine modulare Providerarchitektur sind vorgegeben. Eigener Projektcode soll MIT-lizenziert sein. Veröffentlichung zunächst über GitHub Releases. Keine verpflichtenden Google Play Services, keine obligatorische Orbiliq-Cloud, keine Tracker oder Werbe-SDKs.

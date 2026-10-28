@@ -3,6 +3,7 @@ package org.orbiliq.app
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
@@ -49,5 +50,27 @@ class SignalCompanionIntegrationTest {
             context.contentResolver.query(uri, null, null, null, null)?.close()
             fail("Query access must be rejected")
         } catch (_: SecurityException) { }
+    }
+
+    /** Opt-in real-device assertion. Never reads an account ID, QR or key material. */
+    @Test fun localLinkStateMatchesExplicitHardwareExpectation() {
+        val expected = InstrumentationRegistry.getArguments().getString("expectedSignalLinkState")
+        assumeTrue("No explicit hardware link-state expectation", expected != null)
+        requireCompanion()
+        require(SignalLinkState.entries.any { it.name == expected })
+        // Android may create ContentProviders before Application.onCreate finishes
+        // initializing SignalStore. Only tolerate this explicitly unavailable state;
+        // never retry away a revoked, untrusted or incompatible state.
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        var status: org.orbiliq.core.provider.signal.SignalCompanionStatus
+        do {
+            val result = context.contentResolver.call(uri, "status", null,
+                Bundle().apply { putInt("protocolVersion", SignalBridgeContract.VERSION) })!!
+            status = SignalBridgeContract.decodeStatus(result.getInt("protocolVersion", -1),
+                result.getString("linkState"), result.getStringArray("capabilities")?.toList())
+            if (status.link != SignalLinkState.Unavailable || SystemClock.elapsedRealtime() >= deadline) break
+            SystemClock.sleep(200)
+        } while (true)
+        assertEquals("Local linking state differs from explicit hardware expectation", expected, status.link.name)
     }
 }

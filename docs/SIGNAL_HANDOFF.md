@@ -6,6 +6,33 @@ Stand: 28.10.2026. Prompt 11 ist **nicht abgeschlossen**.
 
 ### Geräteverbindung und Signierschlüssel
 
+### Echtes Linking und Session-Prozessneustart nachgewiesen
+
+Nutzer hat den Companion erfolgreich über die ursprüngliche Signal-App verknüpft.
+Zusätzlicher opt-in Hardwaretest `localLinkStateMatchesExplicitHardwareExpectation`
+prüft über das authentifizierte IPC ausschließlich den Status `Linked` (keine IDs,
+Schlüssel oder Nutzdaten). Mit `-e expectedSignalLinkState Linked` bestanden zunächst
+vier Tests. Nach `am force-stop org.orbiliq.signal.companion` lieferte der erste
+sofortige Status kurz `Unavailable`; die Folgemessung wieder `Linked`.
+Test berücksichtigt jetzt maximal 15 Sekunden Anlaufzeit ausschließlich für
+`Unavailable`, nicht für Revoked/Untrusted/UpdateRequired. Erneuter echter Cold-Start-
+Test: **OK (4 tests), 3,569 s**. Das bestätigt die lokale Sessionpersistenz über
+Prozessneustart, noch keine Sync-/Empfangs-/Versandfunktion in Orbiliq.
+
+Für den Test wurde der ungeschützte RegistrationActivity-Bildschirm ausschließlich
+lokal als Bild angezeigt, nicht decodiert oder hochgeladen. Ein älterer Code führte
+in der primären App zu „Netzwerkfehler“; Ablauf ist eine plausible, nicht bewiesene
+Ursache (ProvisioningSocket-Lifespan 90 Sekunden). Nach frischem Code Erfolg laut
+Nutzer und anschließendem IPC-Nachweis. Beide temporären Bilder nach erfolgreichem
+Linking entfernt. Keine Screenshot-Schutzflags verändert.
+
+Nutzer regte Accessibility für das spätere Linking an. Nicht implementiert: breiter
+App-Bedienzugriff und kein belegter Mechanismus zum Einspeisen eines QR in die Kamera.
+Upstream exportiert DeviceProvisioningActivity für `sgnl://linkdevice`/`tsdevice`,
+die geprüfte Implementierung öffnet aber nur einen Dialog mit Weiterleitung zu den
+Linked-Device-Einstellungen. Das belegt keine direkte QR-Übernahme. Eine gezielte
+Same-device-Übergabe bleibt gesondert zu untersuchen; noch keine Produktzusage.
+
 **Aktueller Nachtrag:** Nutzer hat ausdrücklich zugestimmt, ausschließlich Orbiliq,
 den Orbiliq Signal Companion und das Testpaket einschließlich ihrer lokalen Daten
 neu aufzusetzen. Genau diese drei Pakete deinstalliert, dann die hier gebaute App-/
