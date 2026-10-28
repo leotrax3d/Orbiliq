@@ -35,6 +35,7 @@ SECURITY_FILES = (
     "app/src/main/java/org/orbiliq/core/provider/signal/SignalMessaging.kt",
     "app/src/main/java/org/thoughtcrime/securesms/database/MessageTable.kt",
     "lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/messages/SignalServiceMessageLimits.kt",
+    "feature/registration/src/main/java/org/signal/registration/screens/linkaccount/LinkAccountScreen.kt",
 )
 
 
@@ -151,11 +152,100 @@ def block_primary_registration(checkout: Path):
     viewmodel.write_text(text)
 
 
+LINK_ACCOUNT = "feature/registration/src/main/java/org/signal/registration/screens/linkaccount/"
+SHARE_LINK_COMPOSABLE = """
+
+// Orbiliq: one-phone linking. Shares ONLY the current, short-lived provisioning QR on an explicit tap.
+// The link carries an ephemeral public key; the private key and all account keys never leave this app.
+@Composable
+private fun OrbiliqShareLink(state: LinkAccountScreenState) {
+  val url = state.orbiliqLinkUrl
+  val qr = (state.qrCodeState as? QrState.Loaded)?.qrCodeData
+  if (url == null || qr == null || !url.startsWith("sgnl://linkdevice?")) return
+  val context = androidx.compose.ui.platform.LocalContext.current
+  var confirm by remember { mutableStateOf(false) }
+  val dir = java.io.File(context.externalCacheDir ?: return, "orbiliq-link") // Only path covered by the FileProvider.
+  androidx.compose.runtime.DisposableEffect(url) { onDispose { dir.deleteRecursively() } }
+  androidx.compose.material3.OutlinedButton(onClick = { confirm = true }) {
+    androidx.compose.material3.Text("Kein zweites Handy? QR-Code teilen")
+  }
+  if (confirm) {
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = { confirm = false },
+      title = { androidx.compose.material3.Text("QR-Code auf anderem Bildschirm zeigen") },
+      text = {
+        androidx.compose.material3.Text(
+          "Sende den Code nur an dich selbst (z. B. Laptop, Tablet) und scanne ihn dort mit Signal auf deinem Handy: " +
+            "Einstellungen \\u2192 Verkn\\u00fcpfte Ger\\u00e4te \\u2192 Ger\\u00e4t verkn\\u00fcpfen. " +
+            "Er gilt nur, solange dieser Bildschirm offen ist. Scanne niemals Codes, die dir jemand anderes schickt."
+        )
+      },
+      confirmButton = {
+        androidx.compose.material3.TextButton(onClick = {
+          confirm = false
+          dir.deleteRecursively(); dir.mkdirs()
+          val scale = 16; val quiet = 4
+          val size = (maxOf(qr.width, qr.height) + 2 * quiet) * scale
+          val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+          bitmap.eraseColor(android.graphics.Color.WHITE)
+          for (y in 0 until qr.height) for (x in 0 until qr.width) if (qr.get(androidx.compose.ui.unit.IntOffset(x, y))) {
+            for (dy in 0 until scale) for (dx in 0 until scale)
+              bitmap.setPixel((x + quiet) * scale + dx, (y + quiet) * scale + dy, android.graphics.Color.BLACK)
+          }
+          val file = java.io.File(dir, "signal-verknuepfung.png")
+          file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+          bitmap.recycle()
+          val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+          val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            putExtra(android.content.Intent.EXTRA_TEXT, url)
+            clipData = android.content.ClipData.newRawUri(null, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+          }
+          context.startActivity(android.content.Intent.createChooser(send, "QR-Code teilen"))
+        }) { androidx.compose.material3.Text("Teilen") }
+      },
+      dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = false }) { androidx.compose.material3.Text("Abbrechen") } }
+    )
+  }
+}
+"""
+
+
+def add_link_sharing(checkout: Path):
+    edits = (
+        ("LinkAccountScreenState.kt", "  val showCreateAccount: Boolean = true\n)",
+         "  val showCreateAccount: Boolean = true,\n  val orbiliqLinkUrl: String? = null\n)"),
+        ("LinkAccountViewModel.kt",
+         "it.copy(qrCodeState = QrState.Loaded(qrCodeData = QrCodeData.forData(data = event.url, supportIconOverlay = false)))",
+         "it.copy(qrCodeState = QrState.Loaded(qrCodeData = QrCodeData.forData(data = event.url, supportIconOverlay = false)), orbiliqLinkUrl = event.url)"),
+        ("LinkAccountScreen.kt",
+         "        QrCodeContent(state = state, onEvent = onEvent, isPhone = isPhone, expandButtonVisible = expandButtonVisible)\n",
+         "        QrCodeContent(state = state, onEvent = onEvent, isPhone = isPhone, expandButtonVisible = expandButtonVisible)\n\n        OrbiliqShareLink(state)\n"),
+    )
+    for name, old, new in edits:
+        path = checkout / LINK_ACCOUNT / name
+        text = path.read_text()
+        if text.count(old) != 1:
+            raise RuntimeError("Upstream link-account screen changed")
+        path.write_text(text.replace(old, new))
+    screen = checkout / LINK_ACCOUNT / "LinkAccountScreen.kt"
+    screen.write_text(screen.read_text() + SHARE_LINK_COMPOSABLE)
+    gradle = checkout / "feature/registration/build.gradle.kts"
+    text = gradle.read_text()
+    anchor = '  implementation(project(":core:ui"))\n'
+    if text.count(anchor) != 1:
+        raise RuntimeError("Upstream registration dependencies changed")
+    gradle.write_text(text.replace(anchor, anchor + "  implementation(libs.androidx.core.ktx) // Orbiliq: FileProvider for QR sharing\n"))
+
+
 def configure(checkout: Path):
     if run("git", "rev-parse", "HEAD", cwd=checkout) != REVISION:
         raise RuntimeError("Unexpected upstream revision")
     validate_wire_limit(checkout)
     block_primary_registration(checkout)
+    add_link_sharing(checkout)
     message_table = checkout / "app/src/main/java/org/thoughtcrime/securesms/database/MessageTable.kt"
     table_text = message_table.read_text()
     anchor = "  fun getConversation(threadId: Long): Cursor {"

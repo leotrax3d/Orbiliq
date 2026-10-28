@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 import unittest
 
-from prepare import REVISION, SECURITY_FILES, block_primary_registration, verify_security_manifest, security_policy_digest, validate_wire_limit
+from prepare import REVISION, SECURITY_FILES, add_link_sharing, block_primary_registration, verify_security_manifest, security_policy_digest, validate_wire_limit
 from verify_artifact import verify_archive
 
 SOURCE = os.environ.get("SIGNAL_UPSTREAM_SOURCE")
@@ -78,6 +78,37 @@ class RegistrationGeneratorTest(unittest.TestCase):
         path.write_text(path.read_text().replace("2.kibiBytes", "3.kibiBytes"))
         with self.assertRaisesRegex(RuntimeError, "wire limit changed"):
             validate_wire_limit(self.root)
+LINK_INPUTS = ("feature/registration/build.gradle.kts",) + tuple(
+    REGISTRATION + "screens/linkaccount/" + name for name in ("LinkAccountScreen.kt", "LinkAccountScreenState.kt", "LinkAccountViewModel.kt"))
+
+
+@unittest.skipUnless(SOURCE, "Set SIGNAL_UPSTREAM_SOURCE for pinned upstream integration tests")
+class LinkSharingGeneratorTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        for name in LINK_INPUTS:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(subprocess.check_output(["git", "show", f"{REVISION}:{name}"], cwd=SOURCE))
+
+    def test_only_the_current_device_link_is_shared_after_explicit_confirmation(self):
+        add_link_sharing(self.root)
+        screen = (self.root / LINK_INPUTS[1]).read_text()
+        self.assertEqual(1, screen.count("OrbiliqShareLink(state)\n"))
+        self.assertIn('url.startsWith("sgnl://linkdevice?")', screen)
+        self.assertIn("if (confirm)", screen)
+        self.assertIn("onDispose { dir.deleteRecursively() }", screen)
+        self.assertTrue(screen.isascii())
+        self.assertIn("orbiliqLinkUrl = event.url", (self.root / LINK_INPUTS[3]).read_text())
+
+    def test_link_screen_drift_fails_closed(self):
+        path = self.root / LINK_INPUTS[3]
+        path.write_text(path.read_text().replace("QrCodeData.forData(data = event.url", "QrCodeData.forData(data = changed"))
+        with self.assertRaisesRegex(RuntimeError, "link-account screen changed"):
+            add_link_sharing(self.root)
+
 
 class SourceManifestTest(unittest.TestCase):
     def setUp(self):
