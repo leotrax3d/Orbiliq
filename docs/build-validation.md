@@ -579,6 +579,16 @@ Der korrigierte Companion-Lauf 40668223010 hat den Schritt
 Das ist noch kein erfolgreiches Device Linking.
 # Fortsetzung Signal am 28.10.2026 im neuen Windows-Workspace
 
+Neuester Hardware-Nachtrag: Nach ausdrücklicher Nutzerfreigabe nur die drei Testpakete
+`org.orbiliq.app`, `org.orbiliq.signal.companion`, `org.orbiliq.app.test` entfernt und
+mit gleichem lokalen Debug-Signer neu installiert. Alle Installationen erfolgreich.
+Original-Signal unverändert. `SignalCompanionIntegrationTest` auf dem Pixel über
+WLAN-ADB: **OK (3 tests), 5,389 s**. Geprüft: minimales Statusschema ohne Credentials,
+Versionsablehnung und verweigerte generische Datenabfragen. Das beweist keine Signal-
+Netzwerkfunktion. Companion stammt aus dem alten erfolgreichen korrigierten Run
+40668223010; neuere Navigationssperren aus Run 40693619335 noch nicht installiert.
+Nutzer wurde um native Zustimmung und Rückmeldung zum Linking-Bildschirm gebeten.
+
 Nachtrag: WLAN-ADB erfolgreich gekoppelt und `device` bestätigt. Update des lokal
 neu signierten alten korrigierten Companion-Artefakts durch Android wegen abweichendem
 Bestandssigner abgewiesen; keine Installation oder Datenlöschung erfolgt. Auch das

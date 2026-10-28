@@ -6,6 +6,18 @@ Stand: 28.10.2026. Prompt 11 ist **nicht abgeschlossen**.
 
 ### Geräteverbindung und Signierschlüssel
 
+**Aktueller Nachtrag:** Nutzer hat ausdrücklich zugestimmt, ausschließlich Orbiliq,
+den Orbiliq Signal Companion und das Testpaket einschließlich ihrer lokalen Daten
+neu aufzusetzen. Genau diese drei Pakete deinstalliert, dann die hier gebaute App-/
+Test-APK und den lokal signierten Linking-only-Companion aus Run 40668223010 installiert:
+alle drei Installationen erfolgreich. Original-Signal weder deinstalliert noch
+zurückgesetzt. `SignalCompanionIntegrationTest` erneut auf echter Hardware:
+**OK (3 tests), 5,389 s**. Orbiliq MainActivity geöffnet, Nutzer um native Zustimmung
+und Meldung des Linking-Bildschirms gebeten. Keine QR-Daten erfasst.
+Die neue Companion-Generation aus Run 40693619335 ist noch nicht installiert.
+Direkter Shell-Start der nicht exportierten SignalSetupActivity wurde erwartungsgemäß
+abgewiesen; MainActivity wurde regulär geöffnet. Kein Exportflag geändert.
+
 WLAN-ADB erfolgreich mit dem Pixel gekoppelt; `get-state` bestätigt `device`.
 Keinen Kopplungscode in Dokumentation, Git oder Logs übernehmen.
 USB blieb offline/fehlend. Der heruntergeladene CI-Companion aus 40668223010 wurde
