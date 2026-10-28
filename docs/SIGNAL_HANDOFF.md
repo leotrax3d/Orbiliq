@@ -14,7 +14,11 @@ Neu (`729dfdc`, nur JVM-getestet): Empfangene Zitat-Antworten. Native löst
 Quote-Zeitstempel+Autor nur zu exportierbaren Nachrichten desselben Threads auf
 (nie zu View-once/Ablauf/gelöschten); Provider setzt `Message.replyTo` und meldet
 `signal.quote.receive`. **Antworten senden bleibt nicht unterstützt** (Reply-Command
-wird vor dem Transport abgelehnt). Reaktionen: noch nicht, UI zeigt sie nicht an.
+wird vor dem Transport abgelehnt). Reaktionen (Commit danach, nur JVM-getestet, braucht neuen
+Companion-Build): Native exportiert Emoji + pseudonymisierten Akteur je exportierbarer
+Nachricht; Provider diffed Snapshots zu `ReactionChanged` (Hinzufügen/Ändern/Entfernen),
+auch über Neustarts aus den lokal gespeicherten Reaktionen; Timeline zeigt sie
+schreibgeschützt. Capability `signal.reaction.receive`; **Reagieren senden nicht unterstützt.**
 
 **Für die nächste Agentenübernahme zuerst den vollständigen
 [Übergabeprompt](SIGNAL_NEXT_AGENT_PROMPT.md) lesen.** Nutzer verlangt explizit,

@@ -8,6 +8,7 @@ object SignalMessagingContract {
     const val MAX_TEXT_BYTES = 2048
     const val PAGE_SIZE = 50
     const val MAX_THREADS = 1000
+    const val MAX_REACTIONS = 64
 }
 
 class SignalBinding(val id: String) {
@@ -25,6 +26,7 @@ class SignalText(
     val senderName: String = "",
     /** Native id of the quoted original in the same thread; absent when unresolved or not exportable. */
     val replyTo: Long? = null,
+    val reactions: List<SignalReaction> = emptyList(),
 ) {
     init {
         require(id > 0 && thread > 0 && timestamp > 0 && received > 0)
@@ -33,9 +35,15 @@ class SignalText(
         require(sender == "self" || sender.matches(Regex("[0-9]+|service:[0-9a-f]{64}")))
         require(senderName.length <= 512)
         require(replyTo == null || (replyTo > 0 && replyTo != id))
+        require(reactions.size <= SignalMessagingContract.MAX_REACTIONS && reactions.map { it.actor }.distinct().size == reactions.size)
         require(delivery in setOf("Pending", "Sent", "Delivered", "Read", "Failed"))
     }
     override fun toString() = "SignalText(redacted)"
+}
+/** Signal permits one reaction per actor and message. */
+class SignalReaction(val actor: String, val emoji: String) {
+    init { require(actor == "self" || actor.matches(Regex("[0-9]+|service:[0-9a-f]{64}"))); require(emoji.isNotBlank() && emoji.length <= 32) }
+    override fun toString() = "SignalReaction(redacted)"
 }
 sealed interface SignalSendResult {
     class Queued(val messageId: Long) : SignalSendResult { init { require(messageId > 0) } }

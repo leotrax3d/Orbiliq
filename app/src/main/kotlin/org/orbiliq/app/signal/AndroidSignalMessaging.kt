@@ -63,10 +63,16 @@ internal class AndroidSignalMessaging(private val context: Context) : SignalMess
         } while (true)
         return result
     }
+    private fun reactions(row: Bundle): List<SignalReaction> {
+        val emoji = row.getStringArrayList("reactionEmoji").orEmpty()
+        val actors = row.getStringArrayList("reactionActor").orEmpty()
+        require(emoji.size == actors.size)
+        return actors.zip(emoji) { actor, value -> SignalReaction(actor, value) }
+    }
     private fun decode(bundle: Bundle): List<SignalText> = rows(bundle).also { require(it.size <= SignalMessagingContract.PAGE_SIZE) }.map {
         SignalText(it.getLong("id"), it.getLong("thread"), requireNotNull(it.getString("sender")), requireNotNull(it.getString("text")),
             it.getBoolean("outgoing"), it.getLong("timestamp"), it.getLong("received"), requireNotNull(it.getString("delivery")), it.getBoolean("supported", true), it.getString("senderName").orEmpty(),
-            it.getLong("replyTo").takeIf { id -> id > 0 })
+            it.getLong("replyTo").takeIf { id -> id > 0 }, reactions(it))
     }
     override suspend fun texts(binding: SignalBinding, thread: Long, beforeId: Long): SignalTextPage {
         val result = call("messageTexts", binding, Bundle().apply { putLong("thread", thread); putLong("beforeId", beforeId) })

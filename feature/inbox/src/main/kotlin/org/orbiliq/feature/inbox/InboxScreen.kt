@@ -278,6 +278,11 @@ private fun ConversationScreen(route: SendRoute, snapshot: MessengerSnapshot, mo
                             if (!outgoing && route.conversation.kind == ConversationKind.Group) Text(snapshot.identities.find { it.ref == message.sender }?.displayName ?: "Teilnehmer", style = MaterialTheme.typography.labelMedium)
                             message.replyTo?.let { id -> Text("↳ ${timeline.messages.find { it.id == id }?.let { messageText(it).take(80) } ?: "Ursprüngliche Nachricht nicht geladen"}", style = MaterialTheme.typography.labelMedium) }
                             Text(messageText(message), style = MaterialTheme.typography.bodyLarge)
+                            timeline.reactions[message.id]?.takeIf { it.isNotEmpty() }?.let { counts ->
+                                Text(counts.entries.sortedByDescending { it.value }.joinToString("  ") { (emoji, n) -> if (n > 1) "$emoji $n" else emoji },
+                                    style = MaterialTheme.typography.labelLarge,
+                                    modifier = Modifier.semantics { contentDescription = "Reaktionen: " + counts.entries.joinToString { "${it.key} ${it.value}" } })
+                            }
                             Text("${time(message)} · ${route.providerId.value}${if (outgoing) " · ${deliveryLabel(message.delivery)}" else ""}", style = MaterialTheme.typography.labelSmall)
                             val canReply by produceState(false, route, message.ref, snapshot.syncNotice) { value = message.ref != null && model.canSend(route, "x", message.id) == true }
                             if (canReply && message.content is MessageContent.Text) TextButton(onClick = { replyId = message.id.value }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Antworten") }

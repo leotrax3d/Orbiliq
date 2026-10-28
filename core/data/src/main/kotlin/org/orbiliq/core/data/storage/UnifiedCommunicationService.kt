@@ -19,7 +19,11 @@ class UnifiedCommunicationService(
     override fun observeTimeline(target: ConversationTarget): Flow<UnifiedTimeline> = repository.observeState().map { s ->
         val routes = communicationRoutes(s, target)
         val refs = routes.map { it.conversation.ref }.toSet()
-        UnifiedTimeline(routes, s.messages.filter { it.route in refs }.sortedWith(Message.timelineOrder))
+        val messages = s.messages.filter { it.route in refs }.sortedWith(Message.timelineOrder)
+        val byRef = messages.filter { it.ref != null }.associateBy { it.ref }
+        val reactions = s.reactions.mapNotNull { r -> byRef[r.message]?.let { it.id to r.reaction } }
+            .groupBy({ it.first }, { it.second }).mapValues { (_, emoji) -> emoji.groupingBy { it }.eachCount() }
+        UnifiedTimeline(routes, messages, reactions)
     }.distinctUntilChanged()
 
     override suspend fun sendRoutes(target: ConversationTarget, text: String, replyTo: MessageId?): List<RouteAvailability> {

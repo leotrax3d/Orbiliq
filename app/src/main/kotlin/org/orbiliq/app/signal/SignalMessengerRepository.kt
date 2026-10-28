@@ -38,7 +38,9 @@ internal class SignalMessengerRepository(context: Context) : MessengerRepository
                             val commands = snapshot.pending.filter { it.command.route.accountId == id }.mapNotNull { operation ->
                                 operation.receipt?.toLongOrNull()?.let { MessageRef(operation.command.route, it.toString()) to operation.command.id }
                             }.toMap()
-                            val next = SignalMessagingSession(binding, transport, snapshot.messages.filter { it.route.accountId == id }.mapNotNull { it.ref }, commands)
+                            val next = SignalMessagingSession(binding, transport, snapshot.messages.filter { it.route.accountId == id }.mapNotNull { it.ref }, commands,
+                                previousReactions = snapshot.reactions.filter { it.message.conversation.accountId == id }
+                                    .groupBy { it.message }.mapValues { (_, rows) -> rows.associate { it.actor.remoteIdentityId to it.reaction } })
                             session = next
                             account.value = id
                             notice.value = null

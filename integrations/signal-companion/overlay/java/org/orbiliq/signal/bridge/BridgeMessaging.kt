@@ -17,6 +17,7 @@ import org.json.JSONObject
 import org.orbiliq.core.provider.signal.SignalMessagingContract
 import org.thoughtcrime.securesms.database.SignalDatabase
 import org.thoughtcrime.securesms.database.MessageTable
+import org.thoughtcrime.securesms.database.model.MessageId
 import org.thoughtcrime.securesms.database.model.MessageRecord
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord
 import org.thoughtcrime.securesms.keyvalue.SignalStore
@@ -154,6 +155,9 @@ internal class BridgeMessaging(private val context: Context) {
       putString("text", if (supported) message.body else ""); putBoolean("supported", supported); putBoolean("outgoing", message.isOutgoing)
       putLong("timestamp", message.dateSent); putLong("received", message.dateReceived)
       quoted(message)?.let { putLong("replyTo", it) }
+      val reactions = SignalDatabase.reactions.getReactions(MessageId(message.id)).take(SignalMessagingContract.MAX_REACTIONS)
+      putStringArrayList("reactionEmoji", ArrayList(reactions.map { it.emoji }))
+      putStringArrayList("reactionActor", ArrayList(reactions.map { identity(Recipient.resolved(it.author)) }))
       putString("delivery", when {
         message.isFailed -> "Failed"
         message.hasReadReceipt() -> "Read"

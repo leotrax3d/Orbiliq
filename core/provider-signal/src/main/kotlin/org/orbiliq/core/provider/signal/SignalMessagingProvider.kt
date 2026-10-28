@@ -14,7 +14,7 @@ import org.orbiliq.core.provider.api.*
 
 class SignalMessagingProviderFactory(private val transport: SignalMessagingTransport) : ProviderFactory {
     override val descriptor = ProviderDescriptor(ProviderId("signal"), "Signal Companion", "0.3-direct-text-quotes",
-        ContractVersion(1, 0), setOf(Operations.SendText, Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive), ReplayClass.BestEffort)
+        ContractVersion(1, 0), setOf(Operations.SendText, Operations.ReceiveText, OperationKey("signal.group.title.receive"), SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive), ReplayClass.BestEffort)
     override suspend fun open(account: AccountHandle): ProviderSession {
         require(account.account.providerId == descriptor.id)
         val binding = requireNotNull(transport.binding()) { "signal.messaging.consent-required" }
@@ -31,6 +31,8 @@ class SignalMessagingSession(
     previousCommands: Map<MessageRef, CommandId> = emptyMap(),
     private val clock: Clock = Clock.systemUTC(),
     private val pollMillis: Long = 2000,
+    /** Locally committed reactions (message -> actor -> emoji) so removals while offline are still diffed. */
+    previousReactions: Map<MessageRef, Map<String, String>> = emptyMap(),
 ) : ProviderSession {
     override val accountId = accountFor(binding).id
     override val epoch = UUID.randomUUID().toString()
@@ -49,6 +51,8 @@ class SignalMessagingSession(
     private val firstPageBoundary = mutableMapOf<Long, Long>()
     private val commandMessages = java.util.concurrent.ConcurrentHashMap(previousCommands)
     private val sendGate = Mutex()
+    private val reactionState = previousReactions.filterKeys { it.conversation.accountId == accountId }
+        .mapKeys { it.key.remoteMessageId.toLong() }.toMutableMap()
     init {
         require(pollMillis > 0)
         require(previousMessages.all { it.conversation.accountId == accountId })
@@ -68,6 +72,8 @@ class SignalMessagingSession(
         val provider = ProviderId("signal")
         /** Received quote references only; sending quoted replies is not implemented. */
         val QuoteReceive = OperationKey("signal.quote.receive")
+        /** Received reactions only; sending reactions is not implemented. */
+        val ReactionReceive = OperationKey("signal.reaction.receive")
         fun accountFor(binding: SignalBinding) = Account(AccountId("signal-${binding.id}"), provider, "Signal", IdentityId("signal-${binding.id}:self"))
         private val security = SecurityContext(Encryption.EndToEnd, Verification.Unknown)
     }
@@ -96,6 +102,7 @@ class SignalMessagingSession(
         val operations = if (!ready) emptyMap() else buildMap {
             putAll(mapOf(
             Operations.ReceiveText to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
+            ReactionReceive to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             QuoteReceive to OperationSupport(Availability.Available(), quality = DataQuality.PartialHistory, replay = ReplayClass.BestEffort, security = security),
             Operations.SendText to OperationSupport(if (allowed) Availability.Available(OperationConstraints(maxTextLength = SignalMessagingContract.MAX_TEXT,
                 maxBytes = SignalMessagingContract.MAX_TEXT_BYTES.toLong(), persistentOfflineQueue = true)) else Availability.Restricted(Restriction.Policy),
@@ -168,7 +175,7 @@ class SignalMessagingSession(
                         for (id in chunk) if (found.none { it.id == id }) {
                             val ref = messageRef(thread.id, id)
                             event(ProviderEvent.MessageDeleted(ref, null, commandMessages[ref]), "deleted:$id", "1")
-                            ids.remove(id); revisions.remove("message:$id")
+                            ids.remove(id); revisions.remove("message:$id"); reactionState.remove(id)
                         }
                         found.forEach { checked[it.id] = it }
                     }
@@ -188,6 +195,13 @@ class SignalMessagingSession(
                         revisions.remove("deleted:${text.id}")
                         event(ProviderEvent.MessageUpserted(message, command), "message:${text.id}", "${message.revision}:${command?.value}")
                         ids.add(text.id)
+                        val previous = reactionState[text.id].orEmpty()
+                        val current = text.reactions.associate { it.actor to it.emoji }
+                        for ((actor, emoji) in previous) if (current[actor] != emoji)
+                            event(ProviderEvent.ReactionChanged(message.ref!!, IdentityRef(accountId, actor), emoji, true), "reaction:${text.id}:$actor", "-$emoji", force = true)
+                        for ((actor, emoji) in current) if (previous[actor] != emoji)
+                            event(ProviderEvent.ReactionChanged(message.ref!!, IdentityRef(accountId, actor), emoji, false), "reaction:${text.id}:$actor", emoji, force = true)
+                        reactionState[text.id] = current
                     }
                 }
                 // Removed threads must not leave copied messages behind.

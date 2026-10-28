@@ -58,7 +58,8 @@ class SignalMessagingTest {
     @Test fun textCapabilitiesDoNotPromiseMediaGroupsHistoryOrReplies() = runBlocking {
         running(Peer(binding)) { session, _ ->
             val caps = session.observeCapabilities(scope(session)).first()
-            assertEquals(setOf(Operations.SendText, Operations.ReceiveText, SignalMessagingSession.QuoteReceive), caps.operations.keys)
+            assertEquals(setOf(Operations.SendText, Operations.ReceiveText, SignalMessagingSession.QuoteReceive, SignalMessagingSession.ReactionReceive), caps.operations.keys)
+            assertTrue(session.evaluate(OperationRequest(scope(session), Operations.React)) is Availability.Unsupported)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.SendText, textLength = 4001)) is Availability.Restricted)
             assertTrue(session.evaluate(OperationRequest(scope(session), Operations.Reply, textLength = 2)) is Availability.Unsupported)
             assertTrue(session.evaluate(OperationRequest(CapabilityScope.Conversation(ProviderId("signal"), ConversationRef(session.accountId, "unknown")), Operations.SendText, textLength = 2)) is Availability.Unsupported)
@@ -163,6 +164,31 @@ class SignalMessagingTest {
             assertTrue(session.execute(command(session, CommandPayload.SendText("hi", MessageRef(scope(session).ref, "11")))) is DispatchResult.Rejected)
             assertEquals(0, peer.sendCalls)
         }
+    }
+    private fun reactionEvents(events: List<EventEnvelope>) = events.mapNotNull { it.payload as? ProviderEvent.ReactionChanged }
+        .map { Triple(it.actor.remoteIdentityId, it.reaction, it.removed) }
+    @Test fun reactionSnapshotsBecomeAddChangeAndRemoveEvents() = runBlocking {
+        val peer = Peer(binding).apply { rows[11] = SignalText(11, 7, "9", "x", false, 1, 1, "Sent", reactions = listOf(SignalReaction("9", "👍"), SignalReaction("self", "❤"))) }
+        running(peer) { _, events ->
+            assertEquals(setOf(Triple("9", "👍", false), Triple("self", "❤", false)), reactionEvents(events).toSet())
+            peer.rows[11] = SignalText(11, 7, "9", "x", false, 1, 1, "Sent", reactions = listOf(SignalReaction("9", "😂")))
+            withTimeout(5000) { while (reactionEvents(events).size < 5) delay(10) }
+            assertEquals(listOf(Triple("9", "👍", true), Triple("self", "❤", true), Triple("9", "😂", false)).toSet(), reactionEvents(events).drop(2).toSet())
+            delay(100)
+            assertEquals(5, reactionEvents(events).size) // Unchanged polls emit nothing new.
+        }
+    }
+    @Test fun reactionRemovedWhileOfflineIsRemovedAfterRestart() = runBlocking<Unit> {
+        val peer = Peer(binding).apply { rows[11] = text() }
+        val session = SignalMessagingSession(binding, peer, clock = clock, pollMillis = 10,
+            previousReactions = mapOf(MessageRef(ConversationRef(SignalMessagingSession.accountFor(binding).id, "7"), "11") to mapOf("9" to "👍")))
+        try {
+            val removal = withTimeout(5000) { session.events().mapNotNull { it.payload as? ProviderEvent.ReactionChanged }.first() }
+            assertTrue(removal.removed && removal.reaction == "👍")
+        } finally { session.close() }
+    }
+    @Test fun reactionContractRejectsDuplicateActors() {
+        assertThrows(IllegalArgumentException::class.java) { SignalText(5, 7, "9", "x", false, 1, 1, "Sent", reactions = listOf(SignalReaction("9", "a"), SignalReaction("9", "b"))) }
     }
     @Test fun quoteMayNotReferenceItself() {
         assertThrows(IllegalArgumentException::class.java) { SignalText(5, 7, "9", "x", false, 1, 1, "Sent", replyTo = 5) }

@@ -10,7 +10,8 @@ sealed interface ConversationTarget {
 }
 data class SendRoute(val providerId: ProviderId, val conversation: Conversation)
 data class UnifiedInboxEntry(val route: SendRoute, val latestMessage: Message?)
-data class UnifiedTimeline(val routes: List<SendRoute>, val messages: List<Message>)
+/** [reactions] summarises received reactions per message as emoji -> count; display only. */
+data class UnifiedTimeline(val routes: List<SendRoute>, val messages: List<Message>, val reactions: Map<MessageId, Map<String, Int>> = emptyMap())
 data class RouteAvailability(val route: SendRoute, val availability: Availability)
 sealed interface SendTextResult {
     data class Queued(val commandId: CommandId) : SendTextResult
