@@ -66,6 +66,10 @@ class BridgeConsentActivity : Activity() {
       }
     }
     button("Gerät verknüpfen / Companion öffnen") {
+      if (SignalStore.account.isRegistered && SignalStore.account.isPrimaryDevice) {
+        Toast.makeText(this, "Dieser Companion ist als Primärgerät registriert. Bitte zuerst den Accountstatus in der ursprünglichen Signal-App klären.", Toast.LENGTH_LONG).show()
+        return@button
+      }
       val intent = if (SignalStore.account.isRegistered || KeyCachingService.isLocked(this)) {
         Intent(this, MainActivity::class.java)
       } else {

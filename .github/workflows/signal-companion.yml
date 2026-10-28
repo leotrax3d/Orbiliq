@@ -29,6 +29,9 @@ jobs:
           python3 integrations/signal-companion/prepare.py
           mkdir -p "$HOME/.android"
           keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -keypass android -alias AndroidDebugKey -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 30
+      - name: Verify primary registration is blocked without network
+        working-directory: build/signal-companion/source
+        run: ./gradlew --no-daemon --configuration-cache --max-workers=1 '-Dorg.gradle.jvmargs=-Xmx4g -XX:ActiveProcessorCount=2 -XX:+UseG1GC' -Pkotlin.compiler.execution.strategy=in-process :lib:network:test --tests org.signal.network.api.CompanionRegistrationBoundaryTest
       - name: Build research APK without account credentials
         working-directory: build/signal-companion/source
         run: ./gradlew --no-daemon --configuration-cache --max-workers=1 '-Dorg.gradle.jvmargs=-Xmx8g -XX:ActiveProcessorCount=2 -XX:+UseG1GC' -Pkotlin.compiler.execution.strategy=in-process :Signal-Android:assembleGithubProdSpinner
