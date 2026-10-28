@@ -6,7 +6,7 @@ Stand: 27. Oktober 2026.
 
 Orbiliq ist als lokale, datenschutzorientierte Unified-Messenger-App für Android geplant. Kotlin, Jetpack Compose, Material 3 Expressive, Coroutines/Flow und eine modulare Providerarchitektur sind vorgegeben. Eigener Projektcode soll MIT-lizenziert sein. Veröffentlichung zunächst über GitHub Releases. Keine verpflichtenden Google Play Services, keine obligatorische Orbiliq-Cloud, keine Tracker oder Werbe-SDKs.
 
-Ziel sind eine gemeinsame Chatliste, Kontakte/Identitäten und möglichst weitgehendes Lesen, Empfangen und Senden über vorhandene Messenger. Orbiliq ist kein eigenes Kommunikationsnetz. Funktionsgrenzen und Datenschutz haben Vorrang vor vollständigen Funktionsversprechen. Ein grundlegendes Expressive-Theme und ein erklärter Inbox-Leerzustand sind angelegt; die eigentlichen Produktansichten sind noch nicht gestaltet.
+Ziel sind eine gemeinsame Chatliste, Kontakte/Identitäten und möglichst weitgehendes Lesen, Empfangen und Senden über vorhandene Messenger. Orbiliq ist kein eigenes Kommunikationsnetz. Funktionsgrenzen und Datenschutz haben Vorrang vor vollständigen Funktionsversprechen. Die Smartphone-Oberfläche mit Expressive-Theme, Inbox, Conversation/Composer, Personen, Konten und Einstellungen ist mit dem persistenten Mock verbunden; Geräteabnahme steht aus.
 
 ## Tatsächlicher Repository-Stand
 
@@ -112,8 +112,8 @@ tatsächlicher Keystore-/Geräte-Prozessneustart bleibt ohne Hardware ungeprüft
 
 Technische Funktionsbewertungen sind aus Dokumentation/Code abgeleitet, nicht praktisch bestanden. Vollständige transitive Lizenzprüfung, Rechtsbewertung der konkreten Distribution, Geräte-/Account-/Hintergrund-/Medientests und Sicherheitsreview stehen aus. Android garantiert keinen sofortigen Empfang in jedem Zustand. Notification-Adapter liefern Ausschnitte und bedingte Antworten, keine vollständigen Chats.
 
-Auf dem persistenten Mock mit Sync Engine können jetzt Chat-UI, sichere Medienengine,
-Recovery-UI und Android-Hintergrundscheduler ohne echte Konten aufgebaut werden. Für die erste reale Integration bleibt ein begrenzter Telegram-/TDLib-Machbarkeitsprototyp mit reproduzierbarem Android-Build und Google-freiem Login-/Sync-/Sessionnachweis empfohlen. Dieser Schritt ist **noch nicht beauftragt oder implementiert**. Weitere Companion-Prototypen erst nach den in der Recherche dokumentierten Freigabebedingungen verfolgen.
+Die Chat-UI arbeitet jetzt auf dem persistenten Mock mit Sync Engine. Sichere Medienengine,
+Recovery-UI und Android-Hintergrundscheduler können darauf ohne echte Konten aufgebaut werden. Für die erste reale Integration bleibt ein begrenzter Telegram-/TDLib-Machbarkeitsprototyp mit reproduzierbarem Android-Build und Google-freiem Login-/Sync-/Sessionnachweis empfohlen. Dieser Schritt ist **noch nicht beauftragt oder implementiert**. Weitere Companion-Prototypen erst nach den in der Recherche dokumentierten Freigabebedingungen verfolgen.
 
 Bei späteren Arbeiten zuerst Repository und aktuelle Anweisungen lesen; Recherchequellen bei zeitabhängigen Aussagen erneut prüfen. Projektkontext beschreibt den Stand und ersetzt keine Prüfung tatsächlicher Dateien.
 
@@ -149,3 +149,92 @@ Personenzuordnungen werden abgewiesen. Versand nutzt die bestehende persistente 
 Sync Engine. Mehrere Mockprovider sind mit eigenen Provider-IDs gleichzeitig simulierbar.
 Details und Grenzen stehen im Architekturtext und in ADR 0014; UI und reale Provider folgen
 separat. Keine Codecänderung und keine neue externe Abhängigkeit erforderlich.
+
+
+## Ergebnisse des zehnten Arbeitspakets
+
+Die [Messenger-Oberfläche](architecture/messenger-ui.md) verbindet `feature:inbox` über den
+Domainport `MessengerRepository` mit dem persistenten Mock und Unified Communication.
+Smartphone-Navigation mit Chats, Menschen und Konten; Conversation/Composer mit Replies,
+Versandstatus, Herkunft und dauerhaftem Outboxversand; Personen-/Identitätsansicht,
+Kontodetails und persistierte Hell/Dunkel/System-/Dynamic-Color-Einstellungen. Filter für
+Direkt/Gruppe/Archiv, lokale persistente Archivierung und Suche in Titel/letzter Nachricht.
+
+Material 3 Expressive 1.5.0-beta02 anhand offizieller Quellen bestätigt. Expressive Theme,
+Emphasized-Typografie, springbasierte Filter-Formwechsel und Seitentransitionen, animierte
+Listen, Medium Extended FAB, Sheets/Dialoge, Skeleton-/Loading-/Empty-/Fehlerzustände und
+48-dp-Touch-Targets. SavedState erhält Entwürfe über Navigation/Activity-Neuanlage; keine
+dauerhafte Draftdatenbank nach Taskentfernung. Edge-to-edge, Systemleisten und IME berücksichtigt.
+
+Kein Emulator gestartet. Hardwareabnahme für Darstellung, Animation, Tastatur, TalkBack
+und große Schrift bleibt erforderlich. Medien sind erklärte Platzhalter; neue Remotechats,
+Kontakt-Merge-UI, reale Provideranmeldung und weitergehende Nachrichtenaktionen bleiben offen.
+Build-/Testnachweise siehe [Buildvalidierung](build-validation.md).
+
+## Prompt 11: Signal – unvollständig
+
+Die [erneute Signal-Prüfung](research/08-signal-revalidation.md) bestätigt die bisherigen
+Signal-Android-/Molly-/libsignal-Revisionen und beschreibt konkrete Provisioning-,
+Sekundärgeräte- und Versandpfade. Der Linking-UI-Schalter ist im geprüften
+Signal-Android-Build standardmäßig aus und für Debug an; die offizielle Gerätehilfe allein
+ist kein Release-Buildnachweis.
+
+In der anschließenden Fortsetzung wurde der [Signal-Einrichtungsmilestone](../integrations/signal-companion/README.md)
+implementiert: Generator eines separaten Clientquellbaums mit eigener Application-ID,
+vorhandenem Linked-Device-Flow, lokaler Zustimmungsoberfläche und abgesicherter Status-IPC.
+`core:provider-signal` enthält den MIT-Vertrag, Signaturpolicy und eine auf Einrichtung
+begrenzte Providerklasse. Orbiliq prüft die aktuelle Signatur, Paket/UID und Komponenten;
+der Companion prüft pro Aufruf Android-Permission, UID/Paket, aktuelle Signatur und lokale
+Zustimmung. Eine No-Backup-Datei bindet diese ausschließlich für Statusabfragen geltende
+Zustimmung an das Zertifikat. Beide Prototyp-APKs benötigen denselben aktuellen Signer.
+Normale Upstream-Logsinks werden für den Companion deaktiviert und Crashdetails redigiert.
+Eigene Ergänzungen sind MIT; der modifizierte Signal-Client behält seine AGPL-Pflichten.
+
+Unter Konten ist die separate Einrichtung auch ohne Mock erreichbar. Es werden keine
+QR-Daten oder Protokollschlüssel an Orbiliq übertragen. Lokale Credentials werden nicht
+als Online-/Sync-Nachweis dargestellt. Kein echter Signal-Account wird in Inbox/Outbox
+eingetragen und keine positive Messaging-Capability ergänzt; Aufträge werden abgewiesen.
+Die zehn neuen JVM-Tests bestehen. Am 28.10. wurde ein physisches Pixel 10a mit API 37
+für fünf erfolgreiche UI-Tests einschließlich Signal-Setup und drei erfolgreiche
+Storage-/Keystore-Tests genutzt. Espresso wurde dafür explizit auf 3.7.0 gepinnt;
+die transitiv verwendete 3.5.0 scheiterte an einer auf API 37 entfernten internen API.
+Ältere UI-Tests berücksichtigen nun bestehende archivierte Mock-Chats ohne Datenreset.
+Android-IPC-Integrationstests benötigen den separat installierten Companion und sind
+noch nicht bestanden. Beim Companion reichten 1536 MiB Heap nicht für den Ressourcenmerge;
+der ressourcenbegrenzte Launcher nutzt nach gemessenem GC-Stau mit 2304 MiB jetzt
+3584 MiB mit G1-GC, Configuration Cache und auf Nutzerwunsch zwei CPU-Kerne mit Nice 15.
+Auch 3072 MiB scheiterten mit bestätigtem Java-Heapfehler im Kotlin-Compiler. Für den
+Debug-Companion wird die optionale Kotlin-JVM-Bytecodeoptimierung deaktiviert; ein
+lokaler erfolgreicher Gesamtbuild ist damit noch nicht nachgewiesen. Der separate
+GitHub-CI-Build an `a4fdc94` ist inzwischen in 23m 55s erfolgreich abgeschlossen
+(652 Aufgaben); APK-/Quellartefakt wird für lokale Signatur- und Hardwareprüfungen genutzt. Android-Accounttyp und
+Kontakt-MIME-Typen sind gegenüber der originalen Signal-App isoliert.
+Keine parallelen großen Builds auf dem lokalen 8-GB-Laptop. Nach ausdrücklicher Freigabe
+für das öffentliche Repository läuft der Companion-Build wieder auf GitHub CI; der
+lokale Build wurde dafür beendet. CI erhält keine lokalen Schlüssel oder Accountdaten.
+Konkrete Buildnachweise
+und Grenzen stehen im [Prüfprotokoll](build-validation.md); [ADR 0015](adr/0015-signal-companion-linking-milestone.md)
+hält die Entscheidung fest.
+
+Die Definition of Done von Prompt 11 ist weiterhin **nicht erfüllt**. Offen sind echte
+Account-/QR-/Session-/Entkopplungsnachweise, das Ein-Gerät-QR-Problem, kontogebundene
+Nachrichtenautorisierung, dauerhaftes Ereignisjournal mit Commit/Ack, Empfang/Synchronisation,
+Textversand samt Reconciliation und erst danach Medien/Gruppen/Replies/Reaktionen.
+Einrichtungen und Testdoubles allein erfüllen keine Messagingintegration.
+
+Nachtrag 28.10.: Der erste Companion ist gebaut, lokal mit Orbiliqs Signer signiert
+und auf dem Pixel installiert. Drei IPC-Tests sowie Ablehnung der ADB-Shell bestanden.
+ConsentRequired → NeedsLink nach Nutzerzustimmung ist real geprüft. Beim weiteren
+Bedienen wurde jedoch der Telefonnummernweg genutzt; Status danach PrimaryDeviceNotSupported.
+Kein erfolgreiches Linking. Der erste Companion ist ohne Datenlöschung deaktiviert;
+Original-Signal-Accountstatus noch ungeklärt. Der Generator sperrt nun zusätzlich
+Primärregistrierung an UI und beiden HTTP-APIs. Neue Boundarytests und Neubau laufen
+in CI 40668223010 (Commit fd5dce6). Vor weiteren Accounttests Ergebnis und ursprünglichen
+Accountstatus prüfen. Nicht blind löschen, unregister auslösen oder Primärregistrierung
+fortsetzen. Vollständige Orbiliq-CI 40666966910 an 5347ce8 ist grün; lokale noch
+uncommittete UI-Änderungen sind nicht Teil dieses CI-Nachweises.
+
+Der Nutzer hat anschließend bestätigt, dass die ursprüngliche Signal-App weiterhin
+normal angemeldet ist. Er möchte den Companion-Test von vorne beginnen. Die alte
+Companion-Installation bleibt bis zum korrigierten APK deaktiviert; kein serverseitiges
+Unregister und keine Änderung am ursprünglichen Signal-Paket.

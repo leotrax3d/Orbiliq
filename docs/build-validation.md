@@ -296,3 +296,284 @@ Offline-/Textlängenablehnung, Cross-Route-Antworten, falsche Providerwahl, fehl
 reaktives Unlink und die atomare Abweisung bei Kontaktänderung zwischen Prüfung und Enqueue.
 `git diff --check` ohne Befund. Keine Geräte-/Emulatortests ausgeführt; neue Timeline-/
 Versandwahl-UI sowie reale Messenger sind nicht Teil dieses Domain-Arbeitspakets.
+
+## Arbeitspaket 10: Material 3 Expressive UI Foundation
+
+27.10.2026, JDK 17 aus der vorhandenen lokalen Toolchain, vorhandener Android SDK,
+ein Gradle-Worker, offline. Vor Änderungen bestanden die unveränderten JVM-Tests.
+Offizielle Android-/Material-Quellen wurden aktuell geprüft, siehe
+[UI-Architektur und Quellen](architecture/messenger-ui.md).
+
+Vollständiger Prüflauf:
+
+```sh
+JAVA_HOME=/home/bertram/.local/share/orbiliq-tools/jdk17 ./gradlew --offline --max-workers=1 \
+  test :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug \
+  :app:compileReleaseKotlin -Porbiliq.mock=true --write-locks
+```
+
+**BUILD SUCCESSFUL in 4m 9s**, 216 Aufgaben. **117 JVM-Tests, 0 Fehler**:
+27 Data-, 26 Model-, 19 Provider-API-, 44 Mock- und 1 Feature-Test. Darin drei neue
+UI-Port-Integrationstests für Kontakte/Konten, persistentes reversibles Archiv,
+Text/Reply über Outbox und ReadOnly-Ablehnung ohne optimistische Nachricht.
+Debug-APK, Android-Test-APK und Release-Kotlin-Kompilierung erfolgreich.
+**Lint: 0 Fehler, 3 Hinweise** (vorhandene Launcher-Icon-/Resource-Konfiguration und SQLite-KTX).
+Log: `build/ui-foundation-validation.log` (ignoriert).
+
+Der erste Build erforderte nach Aufnahme von Activity/BackHandler ins Feature die
+Aktualisierung der Dependency Locks. Der neue Testdouble wurde um `close()` ergänzt.
+Ein neuer Integrationstest deckte einen echten Uhrzeitfehler auf: UI-Commands mit
+Systemzeit wurden vom Mock mit fixer Szenarienzeit als PolicyExpired abgelehnt.
+Der persistente App-Adapter startet jetzt mit aktueller Zeit und verwendet eine gemeinsame
+Sessionuhr; die isolierten Mock-Szenarien behalten ihre deterministische Uhr.
+
+Die abschließende gezielte Prüfung nach Verlagerung der Schreibzugriffe auf IO und
+Präzisierung des Android-Composer-Tests nutzt:
+
+```sh
+JAVA_HOME=/home/bertram/.local/share/orbiliq-tools/jdk17 ./gradlew --offline --max-workers=1 \
+  :core:provider-mock:test :app:assembleDebug :app:assembleDebugAndroidTest -Porbiliq.mock=true
+```
+
+**Abschließender Lauf: BUILD SUCCESSFUL in 1m 40s**, 128 Aufgaben. Die 44 Mock-Tests
+bestehen erneut; Debug-APK und aktualisierte Test-APK erfolgreich gebaut.
+Log: `build/ui-foundation-final.log` (ignoriert).
+
+Android-UI-Tests prüfen jetzt Start/Wiederanlage, Chat-Composer, Entwurferhalt über
+Navigation und Activity-Neuanlage, Filter, Personen, Konten und persistierten Dark Mode.
+**Nur kompiliert, nicht auf Gerät ausgeführt.** `adb devices` lieferte keine Geräte;
+auf Nutzerwunsch keinen Emulator auf diesem Laptop gestartet. Keine Screenshots oder
+visuelle Abnahme von Springs, Schriftgrößen, TalkBack und Tastatur/Systemleisten.
+Die Bedienwege sind implementiert; die tatsächliche Geräteabnahme bleibt offen.
+Medienaktionen und reale Messengerprovider sind nicht als funktionsfähig ausgewiesen.
+
+Dependency Locks des Features anschließend für sämtliche Konfigurationen mit
+`:feature:inbox:dependencies --write-locks` offline erfolgreich aktualisiert
+(6 Sekunden, keine unaufgelösten Abhängigkeiten). `git diff --check` ohne Befund.
+
+SHA-256 der finalen lokalen Mock-Debug-APK:
+`daed2ec30712c6dc368d6e3a482e4b55f35c282fcc11ced7b6a76d3541207392`.
+
+## Prompt 11: erneute Signal-Recherche, keine Providerimplementierung
+
+27.10.2026. Bestehender Prüfzustand mit folgendem Befehl geprüft:
+
+```sh
+JAVA_HOME=/home/bertram/.local/share/orbiliq-tools/jdk17 ./gradlew --offline --max-workers=1 \
+  test -Porbiliq.mock=true
+```
+
+BUILD SUCCESSFUL in 1m 47s; 84 Aufgaben, 4 ausgeführt, 2 aus Cache, 78 up-to-date.
+Insbesondere die meisten JVM-Testaufgaben waren up-to-date; kein vollständiger frischer
+Testlauf. Keine Änderungen am Produktcode dieses Arbeitsschritts, keine neuen Signaltests,
+kein Upstream-/Companion-Build, keine Hardware-/Accounttests. Die neue JSON-Quellendatei
+wurde erfolgreich geparst, `git diff --check` ohne Befund. Die
+[Signal-Nachprüfung](research/08-signal-revalidation.md) und der Projektkontext halten die
+fehlende Implementierung und die **nicht erfüllte Definition of Done** ausdrücklich fest.
+
+## Prompt 11, Fortsetzung: Einrichtungscode und erste Hardwaretests
+
+28.10.2026. `core:provider-signal`, der separate Companion-Generator und die geschützte
+Status-/Zustimmungs-IPC sind implementiert. Die Hauptapp enthält nur eigenen MIT-Code;
+der große Client wird getrennt gebaut. Es gibt weiterhin keine Signal-Nachrichtenintegration.
+Auch ein lokal verknüpfter Companion authentifiziert noch keinen konkreten Orbiliq-Account:
+ohne Kontobindung bleibt die Providerklasse `Blocked`. Positive Messaging-Capabilities fehlen.
+
+Erster vollständiger Orbiliq-Prüflauf nach der Unterbrechung:
+
+```sh
+# Prozess auf einen CPU-Kern und Nice 15 begrenzt, JDK 17.
+./gradlew --no-daemon --offline --max-workers=1 \
+  '-Dorg.gradle.jvmargs=-Xmx1024m -XX:ActiveProcessorCount=1' \
+  :core:provider-signal:test :app:assembleDebug :app:assembleDebugAndroidTest \
+  :app:compileReleaseKotlin -Porbiliq.mock=true --write-locks
+```
+
+**BUILD SUCCESSFUL in 3m 10s**, 154 Aufgaben. Debug-/Test-APK und Release-Kotlin erfolgreich.
+Die zehn neuen JVM-Tests prüfen Signatur-/Paketpolicy, fremde Accounts, ablaufende und
+falsche Challenges, Cancellation, geschlossene/entzogene Sessions, redigierte Fehler und
+die Ablehnung unbekannter Versionen, Capabilities, Cursor und Versandbehauptungen.
+Nach der zusätzlichen Kontobindungssperre bestehen sie erneut.
+
+### Physisches Gerät: Pixel 10a, Android API 37
+
+Auf ausdrücklichen Nutzerhinweis wurde das verbundene Gerät verwendet. Kein Emulator,
+keine automatische Primärregistrierung, keine Auswertung der Signal-Datenbank und keine
+pauschalen Logcat-Dumps. Orbiliq- und Test-APK wurden mit `adb install -r` installiert,
+ohne App-Daten zu löschen. Reale Signal-Konten wurden durch diese Tests nicht verändert.
+
+Die ersten vier UI-Tests scheiterten an **Espresso 3.5.0**, das Compose transitiv mitbrachte:
+`InputManager.getInstance` ist auf API 37 nicht mehr vorhanden. Der
+[offizielle Fix](https://github.com/android/android-test/commit/fddcda4adc8eaba515fbf2d790cf8dfe5c1b722d)
+verwendet die öffentliche Serviceabfrage; die
+[AndroidX-Releases](https://developer.android.com/jetpack/androidx/releases/test)
+führen 3.7.0 als stabile Version. Diese Version ist jetzt explizit nur für Androidtests
+gepinnt. Dependency Locks und SHA-256-Verifikation wurden aktualisiert; der POM-Hash wurde
+zusätzlich mit dem direkt von Google Maven abgerufenen POM verglichen und stimmt überein.
+
+Neubau inklusive aktueller zehn JVM-Tests und Auflösung der vollständigen Dependency Locks:
+**BUILD SUCCESSFUL in 11m 49s**, 132 Aufgaben. Kein `FAILED` in den Dependencyreports.
+Log: `build/signal-device-test-build.log` (ignoriert).
+
+Danach bestand bereits die neue Signal-Setup-Navigation. Vier ältere Mock-Tests setzten
+jedoch einen nicht archivierten Beispielchat voraus. Das Gerät enthielt einen bestehenden
+archivierten Mock-Direktchat. Die Tests prüfen jetzt einen geladenen Inboxzustand und öffnen
+den Chat bei Bedarf über den Archivfilter, ohne seinen Archivstatus zurückzusetzen.
+Test-APK-Neubau: **BUILD SUCCESSFUL in 2m 41s**, 111 Aufgaben.
+
+Auf dem Gerät ausgeführt:
+
+```sh
+adb shell am instrument -w -r \
+  -e class org.orbiliq.app.LaunchTest,org.orbiliq.app.MessengerNavigationTest,org.orbiliq.app.SignalSetupNavigationTest \
+  org.orbiliq.app.test/androidx.test.runner.AndroidJUnitRunner
+adb shell am instrument -w -r \
+  -e class org.orbiliq.app.storage.AndroidStorageTest \
+  org.orbiliq.app.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+**5 UI-Tests bestanden** (10,276 s): Start, Activity-Neuanlage, Entwurf/Navigation/Versand
+über den synthetischen Mock, Filter/Personen/Konten/Settings und der erklärende separate
+Signal-Einrichtungseinstieg mit Rückkehr. **3 Storage-Tests bestanden** (0,821 s):
+Keystore/Vault/Projektion nach Wiederöffnung, additive SQLite-Migration und große
+Ciphertextblöcke. Mock-Testnachrichten sind synthetisch; der vorhandene Archivzustand wurde
+beibehalten. Diese Tests belegen keinen echten Signal-Versand.
+Logs: `build/signal-device-ui-tests.log`, `build/signal-device-storage-tests.log` (ignoriert).
+Der zuerst fehlgeschlagene Espresso-Lauf und die Archivannahme sind separat aufbewahrt.
+
+### Separater Companion-Build: noch offen
+
+Der erste Aufruf verwendete irrtümlich `:app`; der Upstream benennt dieses Projekt in
+`:Signal-Android` um. Generator, Anleitung und der neue ressourcenbegrenzte Launcher
+`integrations/signal-companion/build.py` verwenden jetzt den richtigen Taskpfad.
+Die Generierung der festen Revision und die signaturgeschützte Manifestkonfiguration
+wurden erfolgreich geprüft. Upstream-Kryptografie und Servicequellen werden nicht kopiert
+oder neu implementiert, sondern im separaten Client gebaut.
+
+Der erste große Build überlastete mit mehreren JVMs den 8-GB-Laptop. Zusätzliche Prozesse
+wurden beendet; weitere große Builds laufen nacheinander mit Nice 15, inzwischen auf Nutzerwunsch auf zwei CPU-Kernen.
+Ein Versuch wurde gezielt zur Speicherentlastung abgebrochen, nicht wegen eines Codefehlers.
+1536 MiB Java-Heap führten anschließend reproduzierbar zu `Java heap space` in
+`:Signal-Android:mergeGithubProdSpinnerResources`. Mit **2304 MiB** wurde dieser Schritt
+erfolgreich abgeschlossen. Der vollständige APK-Build und die lokalen IPC-Tests mit
+installiertem Companion sind an diesem Dokumentationsstand noch nicht abgeschlossen.
+Aus Zwischenmodulen wird kein erfolgreicher APK- oder Accountnachweis abgeleitet.
+
+Weiter offen: echter QR-Link auf dem Zielgerät, Prozessneustart/Session/Entkopplung,
+kontogebundene Nachrichtenautorisierung, Sync/Empfang/Versand, Medien, Gruppen, Replies
+und Reaktionen. Die ursprüngliche Definition of Done ist weiterhin **nicht erfüllt**.
+
+### Fortsetzung auf dem Laptop
+
+2304 MiB führten bei der großen Kotlin-Appkompilierung zu dauerhaftem GC-Stau; der
+Versuch wurde beendet. Auch 3072 MiB mit G1 scheiterten anschließend mit bestätigtem
+`Java heap space` im Kotlin-Compiler (8m 18s, `build/signal-companion-build.log`).
+Der nächste Versuch verwendet 3584 MiB, G1, Configuration Cache, einen Gradle-Worker
+und In-Process-Kompilierung. Nur im Debug-Task wird die optionale Kotlin-JVM-Optimierung
+übersprungen. Protokollbibliotheken werden dadurch nicht ersetzt.
+
+Nach einer Unterbrechung war der vorherige Prozess nicht mehr vorhanden; der Build
+wurde auf ausdrücklichen Nutzerwunsch auf dem Laptop fortgesetzt. Das aktuelle separate
+Log ist `build/signal-companion-laptop-resume.log`. Es liegt noch kein erfolgreicher
+APK-Nachweis vor. Die Original-Signal-App wird nicht überschrieben. Der Generator
+isoliert zusätzlich Android-Accounttyp und Kontakt-MIME-Typen des Companions.
+
+### Wechsel auf GitHub CI nach Freigabe
+
+Der Nutzer hat die erneute CI-Nutzung für das nun öffentliche Repository ausdrücklich
+freigegeben. Die Repository-Actions waren noch deaktiviert und wurden wieder aktiviert.
+Der eigene Branch `codex/signal-companion-ci` enthält nur Companion-Generator, Overlay,
+geteilten Vertrag und Workflow; weitere lokale App-/UI-Änderungen bleiben unberührt.
+Lauf: https://github.com/leotrax3d/Orbiliq/actions/runs/40662562720 .
+Der lokale Versuch wurde nach bestätigtem CI-Start zur Lastentlastung beendet.
+Ein automatisch zusätzlich gestarteter allgemeiner Android-Build wurde abgebrochen,
+da er auf diesem schmalen Branch die noch lokalen App-Änderungen nicht prüft.
+CI verwendet einen eigenen kurzlebigen Debug-Schlüssel. Lokale Schlüssel und
+Signal-Accountdaten wurden nicht hochgeladen. Der CI-APK-Signer muss vor lokalen
+IPC-Tests durch den passenden lokalen Debug-Signer ersetzt werden. Ergebnis noch offen.
+
+Der erste CI-Lauf scheiterte vor der Kompilierung, weil `setup-android` standardmäßig
+das entfernte SDK-Paket `tools` anforderte. Beide Workflowdateien verwenden jetzt
+explizit `platform-tools`. Der Folgelauf
+https://github.com/leotrax3d/Orbiliq/actions/runs/40662676620
+hat SDK-/Quellvorbereitung abgeschlossen und den eigentlichen APK-Build gestartet.
+
+Parallel läuft auf `codex/signal-provider-tests` die allgemeine Android-CI mit dem
+neuen Signal-Providermodul und seinen credentialfreien Tests. Der erste Lauf
+40664458352 scheiterte vor Tests an vier fehlenden Metadatenprüfsummen. Die POMs
+`guava-parent:33.4.0-jre`, `kotlinx-coroutines-bom:1.8.0` sowie die Gradle-Module von
+`junit-bom:5.10.2` und `5.11.0-M2` wurden direkt über HTTPS von Maven Central
+bezogen, mit dessen SHA-1-Seiten gegengeprüft und mit SHA-256 in die bestehende
+strenge Verification-Metadatei aufgenommen. Keine Verifikation wurde deaktiviert.
+Folgelauf: https://github.com/leotrax3d/Orbiliq/actions/runs/40664717329 .
+
+### Erster vollständiger Companion-Build erfolgreich
+
+GitHub-Lauf **40662676620** an Commit `a4fdc94` ist erfolgreich abgeschlossen:
+**BUILD SUCCESSFUL in 23m 55s**, 652 Aufgaben (540 ausgeführt, 112 aus Cache).
+Das Artefakt `signal-companion-research` enthält APKs und den modifizierten
+entsprechenden Quellbaum (611267781 Bytes komprimiertes CI-Artefakt). Der Build
+benötigte weder lokalen Signierschlüssel noch Signal-Accountdaten.
+Log: `build/signal-companion-ci-success.log` (ignoriert).
+
+Der separate Orbiliq-Lauf 40665933219 hat den expliziten Schritt
+`:core:provider-signal:test` erfolgreich abgeschlossen. Der allgemeine Android-/Lint-/
+Emulatorteil läuft zu diesem Zeitpunkt noch. Vorherige Fehlversuche hatten zusätzliche
+fehlende Eltern-/BOM-Metadaten für Guava 33.6.0-jre und Groovy 4.0.29 gefunden;
+deren SHA-256-Werte wurden nach demselben Maven-Central-Abgleich ergänzt.
+
+Installation, Hardware-IPC und reales Linking sind durch diese CI-Ergebnisse noch
+nicht nachgewiesen. Die Definition of Done von Prompt 11 bleibt offen.
+
+### Hardware-IPC und unerwünschter Primärregistrierungsweg
+
+Die ARM64-APK des ersten erfolgreichen Companion-CI-Laufs wurde lokal neu signiert.
+`apksigner verify` bestätigt den identischen SHA-256-Signer wie Orbiliq. Im fertigen
+Manifest wurden eigene Application-ID/Authority, Signature-Permission und geschützte
+Activity geprüft; die kompilierten Authenticator-/Syncadapter-XMLs und Kontakt-MIME-Typen
+sind isoliert. Installation nur per `adb install -r` für das eigene Companion-Paket.
+Orbiliq und Test-APK wurden ohne Datenreset neu installiert.
+
+**3 echte lokale IPC-Tests bestanden** auf dem Pixel (3,576 s): primitive Statusfelder,
+Versionsablehnung und verweigerter generischer Query. Ein zusätzlicher ADB-Shell-Aufruf
+scheiterte an der Signature-Permission, wie vorgesehen. Die reale Setup-UI zeigte
+zuerst ConsentRequired; nach ausdrücklicher Nutzerzustimmung NeedsLink.
+Logs: `build/signal-companion-device-ipc-tests.log`,
+`build/signal-companion-shell-denied.log` (ignoriert).
+
+Anschließend wurde am Gerät der native Telefonnummernweg geöffnet und eine Telefonnummer
+eingegeben; der Nutzer berichtete weitere ungezielte Klicks. Die Status-IPC meldete danach
+**PrimaryDeviceNotSupported**. Es liegt kein erfolgreicher Sekundärgeräte-Link vor.
+Der erste Companion sperrte Primärregistrierung nur am vorgesehenen Einstieg und nicht
+zuverlässig für andere Upstream-Einstiege. Dieser Build ist für Accounttests überholt.
+Der Companion wurde vorübergehend mit `pm disable-user` deaktiviert, ohne Datenlöschung.
+Die ursprüngliche Signal-App wurde nicht geändert; deren aktueller Accountstatus muss
+der Nutzer noch prüfen. Kein PIN wurde vom Agenten eingegeben oder angefordert.
+Kein QR-Bild wurde übertragen; der lokale Captureversuch brach vor der Aufnahme ab.
+
+Korrektur an `fd5dce6`: Linking als erzwungener Activity-Einstieg, Beschränkung restaurierter
+Navigation, entfernte Primärregistrierungs-/SMS-/Verifikationsoperationen in beiden
+Registration-HTTP-APIs und vier strikte Mock-Transporttests. CI-Lauf
+https://github.com/leotrax3d/Orbiliq/actions/runs/40668223010
+prüft zuerst diese Grenze und baut dann neu. Ergebnis der Korrektur noch offen.
+
+### Orbiliq-CI vollständig erfolgreich
+
+https://github.com/leotrax3d/Orbiliq/actions/runs/40666966910 ist **erfolgreich**,
+einschließlich Signal-JVM-Tests, Android-Build, gesamter JVM-Tests, Lint und Emulatortests.
+Geprüft ist der Commit `5347ce8` auf `codex/signal-provider-tests`: der bestehende
+versionierte Appstand plus neues Signal-Providermodul. Weitere noch lokale Änderungen
+der Setup-UI und Messengeroberfläche sind nicht Teil dieses CI-Commits; ihre oben
+dokumentierten Hardware-/Buildprüfungen sind getrennte Nachweise.
+
+Der ursprüngliche lokale Quellbaum ist inzwischen als überholt markiert und der
+Buildlauncher lehnt Quellbäume ohne alle acht HTTP-Registrierungssperren und ohne
+Navigationspolicy ab. Das erste lokal signierte APK heißt jetzt ausdrücklich
+`companion-first-build-primary-registration-unsafe.apk` und ist kein Installationsziel.
+Die vollständige grüne CI enthält laut heruntergeladenem Report 10 Signal-JVM-Tests
+(0 Fehler, 0 übersprungen) und 5 Emulator-Instrumentationstests (0 Fehler).
+
+Der korrigierte Companion-Lauf 40668223010 hat den Schritt
+`Verify primary registration is blocked without network` erfolgreich abgeschlossen
+(vier Boundarytests). Anschließend ist der korrigierte APK-Build gestartet.
+Das ist noch kein erfolgreiches Device Linking.

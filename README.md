@@ -1,6 +1,6 @@
 # Orbiliq
 
-Datenschutzorientierter Unified-Messenger für Android. Aktuell: Kotlin-/Compose-Grundgerüst mit Material 3 Expressive, Dynamic Color und Hell-/Dunkelmodus.
+Datenschutzorientierter Unified-Messenger für Android. Aktuell: bedienbare Compose-Messenger-Oberfläche mit Material 3 Expressive, Dynamic Color und Hell-/Dunkelmodus.
 Es sind **keine echten Messenger integriert**. Ein optionaler lokaler Mock-Messenger ermöglicht Entwicklung ohne Account und Netzwerk.
 Keine Netzwerkberechtigung, Tracker oder Play-Services-Pflicht.
 
@@ -32,7 +32,7 @@ Der letzte Befehl benötigt ein entsperrtes, per USB verbundenes Gerät mit akti
 USB-Debugging-Funktion oder einen Emulator auf einem geeigneten Rechner.
 Auf dem Entwicklungslaptop wird auf Nutzerwunsch kein Emulator gestartet.
 Der aktuelle lokale Prüfstand steht in [Buildvalidierung](docs/build-validation.md).
-Die UI-Prüfung startet die echte Activity samt Hilt-Graph und prüft den Leerzustand.
+Die UI-Tests starten die echte Activity samt Hilt-Graph und prüfen Start, Navigation und Composer. Ausgeführte Prüfungen und Grenzen stehen im Prüfprotokoll.
 JVM-Ergebnisse stehen unter `<modul>/build/reports/tests/`, Android-Ergebnisse unter
 `app/build/reports/androidTests/`, Lint unter `app/build/reports/lint-results-debug.html`.
 
@@ -43,7 +43,8 @@ JVM-Ergebnisse stehen unter `<modul>/build/reports/tests/`, Android-Ergebnisse u
 ./gradlew --offline :app:assembleDebug -Porbiliq.mock=true
 ```
 
-Der Debug-Schalter zeigt zwei als `[Mock]` markierte Chats in der Inbox.
+Der Debug-Schalter öffnet die Messenger-Oberfläche mit zwei lokalen Testchats und sichtbaren Mock-Hinweisen. Chats lesen, Texte/Antworten senden, archivieren, Personen und Konten ansehen sowie Darstellung einstellen sind bedienbar.
+[UI-Konzept, Quellen und Grenzen](docs/architecture/messenger-ui.md).
 Ohne Schalter bleibt der normale Leerzustand bestehen; Release enthält den Mock nicht.
 Login, Kontakte/Gruppen, Nachrichten/Medien und Fehler lassen sich über die Provider-API
 steuern. Sieben wiederverwendbare Szenarien decken Unterhaltung, Medien, Offline-Recovery,
@@ -52,6 +53,11 @@ unklare Versandwirkung, Revisionskonflikte, Capabilitywechsel und Sync-Gaps ab.
 `--offline` beim Build setzt bereits vorhandene Gradle-/SDK-Abhängigkeiten voraus.
 
 ## Struktur und Entwicklung
+
+Experimenteller [Signal-Companion-Einrichtungspfad](integrations/signal-companion/README.md):
+separater Clientbuild aus festgelegter Signal-Android-Revision, lokale Zustimmung und
+Verknüpfungsstatus. In Orbiliq unter Konten erreichbar. Noch kein Empfang oder Versand
+von Signal-Nachrichten in Orbiliq und keine positiven Messaging-Capabilities.
 
 [Android Foundation](docs/architecture/foundation.md),
 [Domain Model und Provider API](docs/architecture/domain-model.md),

@@ -211,3 +211,5 @@ mit ausdrücklich begrenzter erster SQLite-/AES-GCM-Umsetzung gemäß ADR 0012.
 [Unified Contacts](unified-contacts.md) beschreibt das implementierte konservative
 Matching, manuelle Korrekturen und persistente Ausschlüsse (ADR 0013).
 - [Unified Inbox und Personen-Conversations](unified-communication.md)
+- [Material 3 Expressive Messenger-Oberfläche](messenger-ui.md)
+- [Signal-Companion: Einrichtung und lokale Vertrauensgrenze](../../integrations/signal-companion/README.md)

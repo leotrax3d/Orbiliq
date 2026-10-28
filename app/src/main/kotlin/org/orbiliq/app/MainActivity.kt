@@ -7,7 +7,6 @@ import androidx.activity.enableEdgeToEdge
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.orbiliq.core.domain.ConversationRepository
-import org.orbiliq.core.designsystem.OrbiliqTheme
 import org.orbiliq.feature.inbox.InboxRoute
 
 @AndroidEntryPoint
@@ -16,6 +15,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { OrbiliqTheme { InboxRoute(conversations) } }
+        setContent { InboxRoute(conversations, onProviderSetup = {
+            startActivity(android.content.Intent(this, org.orbiliq.app.signal.SignalSetupActivity::class.java))
+        }) }
     }
 }

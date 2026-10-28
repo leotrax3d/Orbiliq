@@ -2,6 +2,13 @@
 
 **Stand: 27.10.2026. Entscheidung: bedingter lokaler Companion-Ansatz; kein direktes MIT-only-Embedding.**
 
+Erneute Prüfung für Prompt 11: [Upstream-Abgleich, konkrete Android-Einstiegspunkte und
+Implementierungsstand](08-signal-revalidation.md). Die erneut geprüften Branchrevisionen
+sind unverändert. Der anschließende [Einrichtungsmilestone](../../integrations/signal-companion/README.md)
+enthält inzwischen Companion-Generator und lokale Status-IPC, noch keine Messagingintegration.
+Insbesondere ist der Linking-UI-Schalter des geprüften Upstreams
+variantenabhängig. Keine Produktfreigabe aus der Supportbeschreibung ableiten.
+
 ## API, Protokoll und vorhandene Projekte
 
 Signal veröffentlicht Kryptografie-Spezifikationen und Clientcode. Das ist keine unterstützte öffentliche API für einen vollständigen Drittclient. `libsignal` enthält Kryptografie und weitere Signal-Bausteine; Transport, Accountzustand, Gruppen, Medien und lokale Datenhaltung werden dadurch nicht automatisch zu einem fertigen Messenger-SDK. Die aktuelle Kryptografiedokumentation umfasst unter anderem PQXDH, Double Ratchet, Sesame und ML-KEM Braid. Keine eigene Variante oder Auswahl alter Protokollstände implementieren. [Signal-Dokumentation](https://signal.org/docs/), [libsignal](https://github.com/signalapp/libsignal).

@@ -26,6 +26,14 @@ def main():
         xml = ET.parse(source / "app/src/main/res/xml" / name).getroot()
         if xml.get("{http://schemas.android.com/apk/res/android}accountType") != "org.orbiliq.signal.companion":
             parser.error("Android AccountManager identity is not isolated; regenerate companion source")
+    for relative in (
+        "lib/network/src/main/java/org/signal/network/api/RegistrationApiV2.kt",
+        "lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/registration/RegistrationApi.kt",
+    ):
+        if (source / relative).read_text().count("Companion supports linked devices only") != 4:
+            parser.error("Primary registration is not blocked; generate a fresh companion source tree")
+    if not (source / "feature/registration/src/main/java/org/signal/registration/CompanionRegistrationPolicy.kt").is_file():
+        parser.error("Companion registration navigation guard missing; regenerate source")
     jdk = os.environ.get("JAVA_HOME")
     if not jdk:
         parser.error("Set JAVA_HOME to JDK 21")

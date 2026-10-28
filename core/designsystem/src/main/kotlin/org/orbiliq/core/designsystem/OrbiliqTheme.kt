@@ -8,11 +8,11 @@ import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun OrbiliqTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun OrbiliqTheme(darkTheme: Boolean = isSystemInDarkTheme(), dynamicColor: Boolean = true, content: @Composable () -> Unit) {
+    val dark = darkTheme
     val context = LocalContext.current
-    val colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    val colors = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else if (dark) darkColorScheme() else lightColorScheme()
+    } else if (dark) darkColorScheme() else expressiveLightColorScheme()
     MaterialExpressiveTheme(colorScheme = colors, content = content)
 }

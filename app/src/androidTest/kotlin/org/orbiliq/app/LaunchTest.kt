@@ -12,8 +12,11 @@ import org.junit.runner.RunWith
 class LaunchTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private fun assertInboxState() {
-        compose.onNodeWithText(if (BuildConfig.MOCK_MESSENGER) "[Mock] Anna Beispiel" else "Noch keine Unterhaltungen").assertIsDisplayed()
-        if (BuildConfig.MOCK_MESSENGER) compose.onNodeWithText("[Mock] Orbiliq Testgruppe").assertIsDisplayed()
+        // Existing device data may have archived every seeded chat. Verify a loaded inbox,
+        // without resetting data or requiring a particular unarchived fixture.
+        val expected = if (BuildConfig.MOCK_MESSENGER) "Chats und letzte Nachricht suchen" else "Noch keine Unterhaltungen"
+        compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText(expected)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(expected).assertIsDisplayed()
     }
     @Test fun survivesActivityRecreation() {
         compose.activityRule.scenario.recreate()

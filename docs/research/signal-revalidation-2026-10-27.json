@@ -1,0 +1,111 @@
+{
+  "review_date": "2026-10-27",
+  "method": "GitHub API commits/main; immutable raw source reads; no upstream build or account access",
+  "artifacts": [
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "app/src/main/AndroidManifest.xml",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/app/src/main/AndroidManifest.xml",
+      "sha256": "7408268bd6942a30a7bc6176582b4b48fd237e0eb6b325b1207043e546475d2a"
+    },
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "app/build.gradle.kts",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/app/build.gradle.kts",
+      "sha256": "615f2f14642887df545a14af04908564c26c3c67a49dc24c9eb113c07a6a8bd7"
+    },
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "app/src/main/java/org/thoughtcrime/securesms/registration/ui/link/RegisterLinkDeviceResult.kt",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/app/src/main/java/org/thoughtcrime/securesms/registration/ui/link/RegisterLinkDeviceResult.kt",
+      "sha256": "09be0a025a160143e6562c84c7783612dc8f2c280aacdcc0f5929f25d9df0c9f"
+    },
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "app/src/main/java/org/thoughtcrime/securesms/sms/MessageSender.java",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/app/src/main/java/org/thoughtcrime/securesms/sms/MessageSender.java",
+      "sha256": "a9ac3bb9e38361f38d70e0afc58453bf369cbc774845e90b164784a5d7f2f6e8"
+    },
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/provisioning/ProvisioningSocket.kt",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/lib/libsignal-service/src/main/java/org/whispersystems/signalservice/api/provisioning/ProvisioningSocket.kt",
+      "sha256": "1651f2a9113cb0c023725dd7a6200297b428cf4dbfcb5be3c6c61294150852df"
+    },
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/LICENSE",
+      "sha256": "4df3c306dddaaf4baffdff5ca820cc679ac8cd6dc263c6a74517783e42fa7a3b"
+    },
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "BUILDING.md",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/BUILDING.md",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "repository": "mollyim/mollyim-android",
+      "revision": "892d6264ba007b5458a8b74cf9183c665f1f17a1",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/mollyim/mollyim-android/892d6264ba007b5458a8b74cf9183c665f1f17a1/README.md",
+      "sha256": "318ac2b15e80ebc9e3473c177ba4a54dc7e5e2e90fef53367f5e4dff89899738"
+    },
+    {
+      "repository": "mollyim/mollyim-android",
+      "revision": "892d6264ba007b5458a8b74cf9183c665f1f17a1",
+      "path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/mollyim/mollyim-android/892d6264ba007b5458a8b74cf9183c665f1f17a1/LICENSE",
+      "sha256": "4df3c306dddaaf4baffdff5ca820cc679ac8cd6dc263c6a74517783e42fa7a3b"
+    },
+    {
+      "repository": "signalapp/libsignal",
+      "revision": "fc90b90fa2b9c37822fa47ba0e0dcdf387a0c071",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/signalapp/libsignal/fc90b90fa2b9c37822fa47ba0e0dcdf387a0c071/README.md",
+      "sha256": "6b4d0a158971c7cf38dc359383e963531d35305ad045cc3400ca9a7887edc1eb"
+    },
+    {
+      "repository": "signalapp/libsignal",
+      "revision": "fc90b90fa2b9c37822fa47ba0e0dcdf387a0c071",
+      "path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/signalapp/libsignal/fc90b90fa2b9c37822fa47ba0e0dcdf387a0c071/LICENSE",
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    },
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "feature/registration/src/main/java/org/signal/registration/RegistrationRepository.kt",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/feature/registration/src/main/java/org/signal/registration/RegistrationRepository.kt",
+      "sha256": "9e021c12be624d62843f3c81ebf6e8496f802ee5df50c11d7c4d6dfe5c685fa1"
+    },
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "app/src/main/java/org/thoughtcrime/securesms/registration/data/RegistrationRepository.kt",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/app/src/main/java/org/thoughtcrime/securesms/registration/data/RegistrationRepository.kt",
+      "sha256": "423587201e2b9bcbbf4b492e317a56085e54b7fb47eafaba380bf3a04aededb0"
+    },
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "feature/registration/src/main/java/org/signal/registration/screens/welcome/WelcomeScreenViewModel.kt",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/feature/registration/src/main/java/org/signal/registration/screens/welcome/WelcomeScreenViewModel.kt",
+      "sha256": "73aec9d026720862ef8a87c5f7eb5c01b79abd43a106caa657eb00acf8fcdc8e"
+    },
+    {
+      "repository": "signalapp/Signal-Android",
+      "revision": "6e9dddc01f1b26e608ac683807c51e139c141ed2",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/signalapp/Signal-Android/6e9dddc01f1b26e608ac683807c51e139c141ed2/README.md",
+      "sha256": "299c559094c6b1111d9ccb8942ccd09532987dcfa6909c34645507d1f2cc65d5"
+    }
+  ]
+}
